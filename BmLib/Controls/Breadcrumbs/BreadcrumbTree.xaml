@@ -3,26 +3,45 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 
     xmlns:uc="clr-namespace:BmLib.Controls.Breadcrumbs"
+    xmlns:reskeys="clr-namespace:BmLib.Themes"
     >
-    <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/BmLib;component/Controls/Breadcrumbs/BreadcrumbTreeItem.xaml" />
-    </ResourceDictionary.MergedDictionaries>
 
     <Style TargetType="{x:Type uc:BreadcrumbTree}">
-        <!-- Setter Property="ItemTemplate" Value="{StaticResource {x:Type uc:BreadcrumbTreeItem}}" / -->
+        <Setter Property="ItemContainerStyle" Value="{StaticResource {x:Type uc:BreadcrumbTreeItem}}"/>
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type uc:BreadcrumbTree}">
                     <Border BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
+                            >
                         <ItemsPresenter VerticalAlignment="Center" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <Trigger Property="VirtualizingStackPanel.IsVirtualizing" Value="True">
+                <Setter Property="ItemsPanel">
+                    <Setter.Value>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ControlDisabledBackgroundKey}}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ControlDisabledBorderKey}}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>

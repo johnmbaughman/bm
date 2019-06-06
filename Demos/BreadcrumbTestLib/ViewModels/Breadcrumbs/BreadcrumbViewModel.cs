@@ -1,23 +1,30 @@
 namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
 {
-    using BmLib.Enums;
+    using BmLib.Interfaces;
     using BreadcrumbTestLib.Models;
-    using BreadcrumbTestLib.Tasks;
     using BreadcrumbTestLib.ViewModels.Base;
     using BreadcrumbTestLib.ViewModels.Interfaces;
-    using ShellBrowserLib;
-    using ShellBrowserLib.Interfaces;
+    using WSF;
+    using WSF.Enums;
+    using WSF.IDs;
+    using WSF.Interfaces;
+    using SSCoreLib.Browse;
     using System;
     using System.Collections.Generic;
+    using System.Collections.ObjectModel;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
+    using System.Windows;
+    using System.Windows.Controls;
+    using System.Windows.Data;
     using System.Windows.Input;
 
     /// <summary>
     /// Class implements the viewmodel that manages the complete breadcrump control.
     /// </summary>
-    internal class BreadcrumbViewModel : Base.ViewModelBase, IBreadcrumbViewModel
+    internal class BreadcrumbViewModel : Base.ViewModelBase, IBreadcrumbViewModel,
+                                         BmLib.Interfaces.IBreadcrumbModel
     {
         #region fields
         /// <summary>
@@ -25,36 +32,59 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
         /// </summary>
         protected static readonly log4net.ILog Logger = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        private OneTaskLimitedScheduler _OneTaskScheduler;
-        private SemaphoreSlim _Semaphore;
         private bool _EnableBreadcrumb;
-        private string _suggestedPath;
+
+        private bool _IsBrowsing;
+
+        private BreadcrumbTreeItemViewModel _SelectedRootViewModel;
+        private IParent _BreadcrumbSelectedItem;
+        private IDirectoryBrowser _SelectedRootValue;
 
         private ICommand _RootDropDownSelectionChangedCommand;
-        private bool _IsBrowsing;
-        private string _BreadcrumbSelectedPath;
+        private ICommand _AddRecentLocationCommand;
+        private ICommand _ClearRecentLocationsCommand;
 
-        private IDirectoryBrowser _RootLocation = ShellBrowser.DesktopDirectory;
-        private ICompareHierarchy<IDirectoryBrowser> _Comparer = new IDirectoryHierarchyComparer();
+        private readonly INavigationController _NavigationController;
+        private readonly ObservableCollection<BreadcrumbTreeItemViewModel> _OverflowedAndRootItems;
+        private readonly IBreadcrumbTreeItemPath _CurrentPath;
+        private readonly IDirectoryBrowser _RootLocation = Browser.DesktopDirectory;
 
-        private Stack<BreadcrumbTreeItemViewModel> _CurrentPath;
+        private readonly ObservableCollection<string> _RecentLocationItems;
+        private readonly object _RecentLocationItemsItemsLock;
         #endregion fields
 
         #region constructors
         /// <summary>
         /// Class constructor
         /// </summary>
-        public BreadcrumbViewModel()
+        /// <param name="taskQueue"></param>
+        public BreadcrumbViewModel(INavigationController navigationController)
+            : this()
         {
+            _NavigationController = navigationController;
+        }
+
+        /// <summary>
+        /// Hidden standard constructor
+        /// </summary>
+        protected BreadcrumbViewModel()
+        {
+            _RecentLocationItemsItemsLock = new object();
+
+            PathValidation = new ShellPathValidationRule();
+            _OverflowedAndRootItems = new ObservableCollection<BreadcrumbTreeItemViewModel>();
+
+            _RecentLocationItems = new ObservableCollection<string>();
+            BindingOperations.EnableCollectionSynchronization(_RecentLocationItems, _RecentLocationItemsItemsLock);
+
+            _CurrentPath = new BreadcrumbTreeItemPath();
             _EnableBreadcrumb = true;
             _IsBrowsing = false;
-            _CurrentPath = null;
-
-            _Semaphore = new SemaphoreSlim(1, 1);
-            _OneTaskScheduler = new OneTaskLimitedScheduler();
 
             Progressing = new ProgressViewModel();
-            BreadcrumbSubTree = new BreadcrumbTreeItemViewModel(this);
+            BreadcrumbSubTree = new BreadcrumbTreeItemViewModel(null, null, this);
+
+            SuggestSources = new SuggestSourceDirectory();
         }
         #endregion constructors
 
@@ -64,14 +94,31 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
         /// and when its done browsing to a new location.
         /// </summary>
         public event EventHandler<BrowsingEventArgs> BrowseEvent;
+
+        /// <summary>
+        /// Raised when a node is selected, use SelectedValue/ViewModel to return the selected item.
+        /// </summary>
+        public event EventHandler SelectionChanged;
         #endregion browsing events
 
         #region properties
         /// <summary>
+        /// Provide a way of validating whether a string path is valid or not.
+        /// </summary>
+        public ValidationRule PathValidation { get; }
+
+        /// <summary>
+        /// Gets a list of suggestions that match a string based path query
+        /// when the <see cref="SuggestionBox"/> is visible and the user can
+        /// enter a string based path.
+        /// </summary>
+        public SuggestSourceDirectory SuggestSources { get; }
+
+        /// <summary>
         /// Gets a viewmodel that manages the progress display that is shown to inform
         /// users of long running processings.
         /// </summary>
-        public IProgressViewModel Progressing { get; }
+        public IProgress Progressing { get; }
 
         /// <summary>
         /// Gets a viewmodel that manages the sub-tree brwosing and
@@ -103,91 +150,37 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
             }
         }
 
-        public string BreadcrumbSelectedPath
+        /// <summary>
+        /// Gets a seperate viewmodel object that keeps track of the current 
+        /// path and all its viewmodel object items.
+        /// </summary>
+        public IBreadcrumbTreeItemPath CurrentPath
         {
             get
             {
-                return _BreadcrumbSelectedPath;
-            }
-
-            set
-            {
-                if (_BreadcrumbSelectedPath != value)
-                {
-                    _BreadcrumbSelectedPath = value;
-                    NotifyPropertyChanged(() => BreadcrumbSelectedPath);
-                }
+                return _CurrentPath;
             }
         }
-
-        public string SuggestedPath
-        {
-            get { return _suggestedPath; }
-            set
-            {
-                _suggestedPath = value;
-
-                NotifyPropertyChanged(() => SuggestedPath);
-                OnSuggestPathChanged();
-            }
-        }
-
-        ////        /// <summary>
-        ////        /// Contains a list of items that maps into the SuggestBox control.
-        ////        /// </summary>
-        ////        public IEnumerable<ISuggestSource> SuggestSources
-        ////        {
-        ////            get
-        ////            {
-        ////                return _suggestSources;
-        ////            }
-        ////            set
-        ////            {
-        ////                _suggestSources = value;
-        ////                NotifyOfPropertyChange(() => SuggestSources);
-        ////            }
-        ////        }
 
         /// <summary>
-        /// Gets a command that can change the navigation target of the currently
-        /// selected location towards a new location.
-        /// 
-        /// Expected command parameter:
-        /// Array of length 1 with an object of type <see cref="BreadcrumbTreeItemViewModel"/>
-        /// object[1] = {new <see cref="BreadcrumbTreeItemViewModel"/>() }
+        /// Gets a currently selected item that is at the end
+        /// of the currently selected path.
         /// </summary>
-        public ICommand RootDropDownSelectionChangedCommand
+        public IParent BreadcrumbSelectedItem
         {
             get
             {
-                if (_RootDropDownSelectionChangedCommand == null)
+                return _BreadcrumbSelectedItem;
+            }
+
+            protected set
+            {
+                if (_BreadcrumbSelectedItem != value)
                 {
-                    _RootDropDownSelectionChangedCommand = new RelayCommand<object>(async (p) =>
-                    {
-                        var parArray = p as object[];
-                        if (parArray == null)
-                            return;
-
-                        if (parArray.Length <= 0)
-                            return;
-
-                        // Limitation of command is currently only 1 LOCATION PARAMETER being processed
-                        var selectedFolder = parArray[0] as BreadcrumbTreeItemViewModel;
-
-                        if (selectedFolder == null)
-                            return;
-
-                        if (IsBrowsing == true)
-                            return;
-
-                        Logger.InfoFormat("selectedFolder {0}", selectedFolder);
-
-                        var request = new BrowseRequest<IDirectoryBrowser>(selectedFolder.GetModel());
-                        await this.NavigateToAsync(request, "BreadcrumbViewModel.RootDropDownSelectionChangedCommand");
-                    });
+                    _BreadcrumbSelectedItem = value;
+                    NotifyPropertyChanged(() => BreadcrumbSelectedItem);
+                    NotifyPropertyChanged(() => CurrentPath);
                 }
-
-                return _RootDropDownSelectionChangedCommand;
             }
         }
 
@@ -216,30 +209,413 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
                 }
             }
         }
+
+        /// <summary>
+        /// Gets a list of viewmodel items that are shown at the root drop down
+        /// list of the control (left most drop down list)
+        /// </summary>
+        public IEnumerable<BreadcrumbTreeItemViewModel> OverflowedAndRootItems
+        {
+            get
+            {
+                return _OverflowedAndRootItems;
+            }
+        }
+
+        /// <summary>
+        /// Gets/sets the selected second level root item VIEWMODEL
+        /// (eg. This PC, Library Desktop, or Desktop Folder).
+        /// below the root desktop item.
+        /// 
+        /// This property usually changes:
+        /// 1) When the user opens the drop down and selects 1 item in the dropdownlist of the RootDropDown button or
+        /// 2) When the control navigates to a unrelated second level root address
+        ///    (eg.: From 'This PC','C:\' to 'Libraries','Music')
+        /// </summary>
+        public BreadcrumbTreeItemViewModel SelectedRootViewModel
+        {
+            get
+            {
+                return _SelectedRootViewModel;
+            }
+
+            protected set
+            {
+                _SelectedRootViewModel = value;
+                NotifyPropertyChanged(() => SelectedRootViewModel);
+            }
+        }
+
+        /// <summary>
+        /// Gets/sets the selected second level root item MODEL
+        /// (eg. This PC, Library Desktop, or Desktop Folder)
+        /// below the root desktop item.
+        /// 
+        /// This property usually changes:
+        /// 1) When the user opens the drop down and selects 1 item in the dropdownlist of the RootDropDown button or
+        /// 2) When the control navigates to a unrelated second level root address
+        ///    (eg.: From 'This PC','C:\' to 'Libraries','Music')
+        /// 
+        /// Source:
+        /// DropDownList Binding with SelectedValue="{Binding Selection.SelectedValue}"
+        /// </summary>
+        public IDirectoryBrowser SelectedRootValue
+        {
+            get
+            {
+                return _SelectedRootValue;
+            }
+
+            set
+            {
+                bool bHasChanged = true;
+
+                if (_SelectedRootValue == null && value == null)
+                    bHasChanged = false;
+                else
+                {
+                    if ((_SelectedRootValue != null && value == null) ||
+                        (_SelectedRootValue == null && value != null))
+                        bHasChanged = true;
+                    else
+                    {
+                        bHasChanged = !_SelectedRootValue.Equals(value);
+                    }
+                }
+
+                if (bHasChanged == true)
+                {
+                    _SelectedRootValue = value;
+                    NotifyPropertyChanged(() => this.SelectedRootValue);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets a command that can change the navigation target of the currently
+        /// selected location towards a new location.
+        /// 
+        /// Expected command parameter:
+        /// Array of length 1 with an object of type <see cref="BreadcrumbTreeItemViewModel"/>
+        /// object[1] = {new <see cref="BreadcrumbTreeItemViewModel"/>() }
+        /// </summary>
+        public ICommand RootDropDownSelectionChangedCommand
+        {
+            get
+            {
+                if (_RootDropDownSelectionChangedCommand == null)
+                {
+                    _RootDropDownSelectionChangedCommand = new RelayCommand<object>(async (p) =>
+                    {
+                        if (_IsBrowsing == true)
+                            return;
+
+                        var parArray = p as object[];
+                        if (parArray == null)
+                            return;
+
+                        if (parArray.Length <= 0)
+                            return;
+
+                        // Limitation of command is currently only 1 LOCATION PARAMETER being processed
+                        var selectedFolder = parArray[0] as BreadcrumbTreeItemViewModel;
+
+                        if (selectedFolder == null)
+                            return;
+
+                        Logger.InfoFormat("selectedFolder {0}", selectedFolder);
+
+                        await RootDropDownSelectionChangedCommand_Executed(selectedFolder);
+                    });
+                }
+
+                return _RootDropDownSelectionChangedCommand;
+            }
+        }
+
+        /// <summary>
+        /// Gets a list of recent locations containing a Windows Shell or
+        /// a File System path.
+        /// </summary>
+        public IEnumerable<string> RecentLocationItems
+        {
+            get
+            {
+                return _RecentLocationItems;
+            }
+        }
+
+        /// <summary>
+        /// Gets a command that adds the current Windows Shell Path or
+        /// File System path into the list of recent location items.
+        /// </summary>
+        public ICommand AddRecentLocationCommand
+        {
+            get
+            {
+                if (_AddRecentLocationCommand == null)
+                {
+                    _AddRecentLocationCommand = new RelayCommand<object>((p) =>
+                    {
+                        if (_IsBrowsing == true)
+                            return;
+
+                        PathType pathTypeParam;
+                        string currPath = _CurrentPath.GetPath(out pathTypeParam);
+
+                        if (pathTypeParam == PathType.FileSystemPath ||
+                            pathTypeParam == PathType.WinShellPath)
+                        {
+                            AddRecentLocation(currPath);
+                        }
+                    });
+                }
+
+                return _AddRecentLocationCommand;
+            }
+        }
+
+        /// <summary>
+        /// Gets a command that remove all Windows Shell Paths or
+        /// File System paths in the list of recent location items.
+        /// </summary>
+        public ICommand ClearRecentLocationsCommand
+        {
+            get
+            {
+                if (_ClearRecentLocationsCommand == null)
+                {
+                    _ClearRecentLocationsCommand = new RelayCommand<object>((p) =>
+                    {
+                        if (_IsBrowsing == true)
+                            return;
+
+                        _RecentLocationItems.Clear();
+                    });
+                }
+
+                return _ClearRecentLocationsCommand;
+            }
+        }
         #endregion properties
 
         #region methods
+        /// <summary>
+        /// This navigates the bound tree view model to the requested
+        /// location when the user switches the display from:
+        /// 
+        /// - the string based and path oriented suggestbox back to
+        /// - the tree view item based and path orient tree view.
+        /// </summary>
+        /// <param name="navigateToThisLocation"></param>
+        /// <returns></returns>
+        Task<bool> IBreadcrumbModel.NavigateTreeViewModel(string navigateToThisLocation,
+                                                          bool goBackToPreviousLocation
+                                                          )
+        {
+            return Task.Run<bool>(async () =>
+            {
+                bool isPathValid = true;
+
+                try
+                {
+                    navigateToThisLocation = Browser.NormalizePath(navigateToThisLocation);
+
+                    // Navigation to new location was cancelled of given path is obviously empty
+                    // Lets try and rollback to previously active location
+                    if (string.IsNullOrEmpty(navigateToThisLocation) || goBackToPreviousLocation)
+                    {
+                        // Lets just go back to this without further processing
+                        if (BreadcrumbSelectedItem != null)
+                            return true;
+
+                        isPathValid = false;
+                    }
+                    else
+                    {
+                        LocationIndicator li = SuggestSources.CurrentPath;
+                        IDirectoryBrowser[] pathItems = null;
+                        if (li != null)
+                        {
+                            // Source of request supports a LocationIndicator -> Check Valid state
+                            PathType pathTypeParam;
+                            var path = li.GetPath(navigateToThisLocation, out pathTypeParam);
+
+                            if (Browser.IsCurrentPath(path, navigateToThisLocation) == PathMatch.CompleteMatch)
+                            {
+                                isPathValid = true;
+                                pathItems = li.GetPathModels();
+                            }
+                        }
+
+                        if (pathItems != null)
+                        {
+                            // Path is not rooted
+                            // Eg: We changed from 'C:' to 'F:' and are missing 'Desktop/ThisPC' root now
+                            if ((pathItems[0].ItemType & DirectoryItemFlags.Desktop) == 0)
+                            {
+                                bool pathIsRooted = false;
+                                IDirectoryBrowser[] rootedPathItems = Browser.FindRoot(pathItems, navigateToThisLocation,
+                                                                                            out pathIsRooted);
+
+                                if (pathIsRooted == true)
+                                {
+                                    // We already have the objects representing the path
+                                    // so lets navigate the tree to this location
+                                    await NavigateToScheduledAsync(rootedPathItems, "BreadcrumbViewModel.NavigateTreeViewModel 1");
+                                    return true;
+                                }
+
+                                // Try a second time with an approach closer to the system
+                                rootedPathItems = Browser.FindRoot(pathItems[pathItems.Length - 1]);
+
+                                if (rootedPathItems != null)
+                                {
+                                    // We already have the objects representing the path
+                                    // so lets navigate the tree to this location
+                                    await NavigateToScheduledAsync(rootedPathItems, "BreadcrumbViewModel.NavigateTreeViewModel 1");
+                                    return true;
+
+                                }
+                            }
+                        }
+
+                        // Verify path existence and re-mount into root item
+                        if (pathItems == null)
+                            isPathValid = Browser.DirectoryExists(navigateToThisLocation, out pathItems);
+
+                        if (isPathValid == true)
+                        {
+                            // The path is valid but we do not have any objects for it, yet.
+                            // So, lets update the tree view based on the string representation.
+                            if (pathItems == null)
+                            {
+                                var location = Browser.Create(navigateToThisLocation);
+                                await NavigateToScheduledAsync(location, "BreadcrumbViewModel.NavigateTreeViewModel 0");
+                                return true;
+                            }
+                        }
+
+                        // Attempt re-mounting if we find a common root for the given path
+                        var currentPath = _CurrentPath.GetPathModels();
+                        string extendPath = null;
+                        int idxCommonRoot = Browser.FindCommonRoot(currentPath, navigateToThisLocation, out extendPath);
+
+                        if (idxCommonRoot > 0 && extendPath != null)
+                        {
+                            List<IDirectoryBrowser> pathList = new List<IDirectoryBrowser>();
+                            for (int i = 0; i <= idxCommonRoot; i++)
+                            {
+                                pathList.Add(currentPath[i].Clone() as IDirectoryBrowser);
+                            }
+
+                            bool joinSuccess = true;
+                            if (string.IsNullOrEmpty(extendPath) == false)
+                                joinSuccess = Browser.ExtendPath(ref pathList, extendPath);
+
+                            if (joinSuccess) // path joined successfully -> lets go where no one has been before...
+                            {
+                                await NavigateToScheduledAsync(pathList.ToArray(), "BreadcrumbViewModel.NavigateTreeViewModel 2");
+                                return true;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    isPathValid = false;
+                }
+
+                return isPathValid;
+            });
+        }
+
+        /// <summary>
+        /// Updates the bound text path property of the SuggestBox with the path of the
+        /// currently selected item. This method should be called whenever the SuggestBox
+        /// is switched from invisible to visible.
+        /// </summary>
+        /// <param name="locations"></param>
+        /// <returns></returns>
+        string IBreadcrumbModel.UpdateSuggestPath(out object locations)
+        {
+            locations = null;
+            string path = string.Empty;
+
+            if (_CurrentPath.Count > 0)
+            {
+                var locs = _CurrentPath.GetLocation();
+                path = locs.GetFileSystemPath();
+
+                if (string.IsNullOrEmpty(path))
+                    path = locs.GetWinShellPath();
+
+                SuggestSources.ResetLocationIndicator(locs);
+                locations = locs;
+            }
+
+            return path;
+        }
+
         /// <summary>
         /// Method should be called after construction to initialize the viewmodel
         /// to view a default content.
         /// </summary>
         /// <param name="initialRequest"></param>
-        public Task InitPathAsync()
+        public async Task InitPathAsync()
         {
-            return Task.Run(async () =>
+            BreadcrumbTreeItemViewModel item = null;
+            item = BreadcrumbSubTree.InitRoot(_RootLocation);
+
+            if (item != null)
             {
-                await BreadcrumbSubTree.InitRootAsync(_RootLocation);
+                _CurrentPath.Add(item);
+                await UpdateListOfOverflowableRootItemsAsync(_CurrentPath.Items, item);
 
-                _CurrentPath = new Stack<BreadcrumbTreeItemViewModel>() { };
-                _CurrentPath.Push(BreadcrumbSubTree.Entries.All.First());
-
-                var rootSelector = BreadcrumbSubTree.Selection as ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>;
-                var request = new BrowseRequest<IDirectoryBrowser>(_RootLocation);
+                var request = new BrowseRequest<IDirectoryBrowser>(_RootLocation, RequestType.Navigational);
                 await NavigateToAsync(request, "BreadcrumbViewModel.InitPathAsync");
+            }
+        }
 
-                //var items = await BrowseItemsAsync(BreadcrumbSubTree, initLocation);
-                //UpdateListOfOverlowableRootItems(rootSelector, items);
-            });
+        /// <summary>
+        /// Schedules a navigational task and returns immediately
+        /// </summary>
+        /// <param name="targetLocation"></param>
+        /// <param name="sourceHint"></param>
+        /// <param name="hintDirection"></param>
+        /// <param name="toBeSelectedLocation"></param>
+        public async Task NavigateToScheduledAsync(
+            IDirectoryBrowser targetLocation,
+            string sourceHint,
+            HintDirection hintDirection = HintDirection.Unrelated,
+            BreadcrumbTreeItemViewModel toBeSelectedLocation = null
+        )
+        {
+            if (_NavigationController != null)
+            {
+                var cancelTokenSrc = _NavigationController.GetCancelToken();
+                var token = CancellationToken.None;
+
+                var request = new BrowseRequest<IDirectoryBrowser>(targetLocation,
+                                                                   RequestType.Navigational,
+                                                                   token, cancelTokenSrc, null);
+
+                var NaviTask = Task.Factory.StartNew(async (s) =>
+                {
+                    await this.NavigateToAsync(request, sourceHint, hintDirection, toBeSelectedLocation);
+
+                }, token, TaskCreationOptions.LongRunning);
+
+                request.SetTask(NaviTask);
+                _NavigationController.QueueTask(request);
+            }
+            else
+            {
+                var request = new BrowseRequest<IDirectoryBrowser>(targetLocation, RequestType.Navigational);
+                await NavigateToAsync(request,
+                    "BreadcrumbTreeItemViewModel.BreadcrumbTreeTreeItemClickCommand",
+                    hintDirection, toBeSelectedLocation);
+            }
         }
 
         /// <summary>
@@ -259,26 +635,48 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
             BrowseRequest<IDirectoryBrowser> requestedLocation,
             string sourceHint,
             HintDirection direction = HintDirection.Unrelated,
-            int ihintLevel = -1)
+            BreadcrumbTreeItemViewModel toBeSelectedLocation = null)
         {
-            Logger.InfoFormat("Request '{0}' direction {1} level {2} source: {3} IsBrowsing {4}",
-                requestedLocation.NewLocation, direction, ihintLevel, sourceHint, IsBrowsing);
+            Logger.InfoFormat("Request '{0}' direction {1} source: {2} IsBrowsing {3}",
+                requestedLocation.NewLocation, direction, sourceHint, IsBrowsing);
 
             try
             {
+                Progressing.ShowIndeterminatedProgress();
                 IsBrowsing = true;
-                return await Task.Run(async () =>
+                try
                 {
-                    var result = await InternalNavigateToAsync(requestedLocation.NewLocation
-                                                             , direction, ihintLevel);
+                    BrowseResult result = BrowseResult.Unknown;
+
+                    // Optimize browsing up or down in current path
+                    if (toBeSelectedLocation != null &&
+                        (direction == HintDirection.Up || direction == HintDirection.Down))
+                        result = await InternalNavigateUpDownAsync(toBeSelectedLocation,
+                                                                   requestedLocation, direction);
+                    else
+                    {
+                        if (requestedLocation.PathConfirmed == true)
+                        {
+                            // We have a verified path of model items - lets get the viewmodel items for this
+                            result = await InternalNavigateAsyncToNewLocationAsync(BreadcrumbSubTree,
+                                                                                   requestedLocation.LocationsPath);
+                        }
+                        else
+                        {
+                            // Unwind the string location based on the available SubTree ViewModel Items
+                            result = await InternalNavigateAsyncToNewLocationAsync(BreadcrumbSubTree,
+                                                                                   requestedLocation.NewLocation);
+                        }
+                    }
 
                     return FinalBrowseResult<IDirectoryBrowser>.FromRequest(requestedLocation,
                                                                             result);
-                }).ContinueWith((result)=>
+                }
+                finally
                 {
+                    Progressing.ProgressDisplayOff();
                     IsBrowsing = false;
-                    return result.Result;
-                });
+                }
             }
             catch
             {
@@ -288,291 +686,454 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
         }
 
         /// <summary>
-        /// Implements the internal version of the navigational request method.
-        /// This method should always be called through a method that ensures
-        /// correct synchronization using the correct semaphore.
-        /// 
-        /// Method should result in resetting _CurrentPath to new path targeted in request.
-        ///
-        /// Items in _CurrentPath should always adhere to these requirements:
-        /// The last item in the stack should have   LastItem.Selection.IsSelected      == true and
-        /// all other items in the stack should have OtherItem.Selection.IsChildSelected == true
-        ///                                          OtherItem.Selection.SelectedChild   != null
+        /// Schedules a navigational request from a list of path model items and
+        /// executes the request via asynchronous task execution.
         /// </summary>
+        /// <param name="targetLocations"></param>
+        /// <param name="sourceHint"></param>
+        /// <returns></returns>
+        private async Task NavigateToScheduledAsync(IDirectoryBrowser[] targetLocations,
+                                                    string sourceHint)
+        {
+            if (_NavigationController != null)
+            {
+                var cancelTokenSrc = _NavigationController.GetCancelToken();
+                var token = CancellationToken.None;
+
+                var request = new BrowseRequest<IDirectoryBrowser>(targetLocations,
+                                                                   RequestType.Navigational,
+                                                                   token, cancelTokenSrc, null);
+
+                var NaviTask = Task.Factory.StartNew(async (s) =>
+                {
+                    await this.NavigateToAsync(request, sourceHint);
+
+                }, token, TaskCreationOptions.LongRunning);
+
+                request.SetTask(NaviTask);
+                _NavigationController.QueueTask(request);
+            }
+            else
+            {
+                var location = targetLocations[targetLocations.Length - 1];
+                var request = new BrowseRequest<IDirectoryBrowser>(location, RequestType.Navigational);
+                await NavigateToAsync(request,
+                    "BreadcrumbTreeItemViewModel.BreadcrumbTreeTreeItemClickCommand");
+            }
+        }
+
+        /// <summary>
+        /// Implements an optimized browse path behavior for browsing back to an item that is
+        /// already part of the currently selected path.
+        /// </summary>
+        /// <param name="toBeSelectedLocation"></param>
+        /// <param name="requestedLocation"></param>
+        /// <param name="direction"></param>
+        /// <returns></returns>
+        private async Task<BrowseResult> InternalNavigateUpDownAsync(
+            BreadcrumbTreeItemViewModel toBeSelectedLocation,
+            BrowseRequest<IDirectoryBrowser> requestedLocation,
+            HintDirection direction)
+        {
+            bool isMatchAvailable = false;            // Make sure requested location is really
+            foreach (var item in _CurrentPath.Items) // part of current path (before edit current path...)
+            {
+                if (item.Equals(toBeSelectedLocation))
+                {
+                    isMatchAvailable = true;
+                    break;
+                }
+            }
+
+            if (isMatchAvailable == false)
+                return BrowseResult.InComplete;
+
+            if (_CurrentPath.Peek().Equals(toBeSelectedLocation) == false)
+            {
+                // Pop current path items until we find the one we need
+                var lastPathItem = _CurrentPath.Pop();
+                while (lastPathItem != null)
+                {
+                    lastPathItem.Selection.SelectedChild = null;
+                    lastPathItem.Selection.IsSelected = false;
+
+                    var nextLastPathItem = _CurrentPath.Peek();
+
+                    if (nextLastPathItem != null)
+                    {
+                        nextLastPathItem.Selection.SelectedChild = null;
+                        nextLastPathItem.Selection.IsSelected = true;
+
+                        if (nextLastPathItem.Equals(toBeSelectedLocation))
+                            break;
+
+                        lastPathItem = _CurrentPath.Pop();
+                    }
+                    else
+                        break;
+                }
+            }
+
+            var newSelectedLocation = toBeSelectedLocation;
+            if (direction == HintDirection.Down)
+            {
+                if (toBeSelectedLocation.Entries.IsLoaded == false)
+                    await toBeSelectedLocation.Entries.LoadAsync();
+
+                foreach (var item in toBeSelectedLocation.Entries.All)
+                {
+                    if (item.EqualsLocation(requestedLocation.NewLocation))
+                    {
+                        var topItem = _CurrentPath.Peek();
+
+                        topItem.Selection.IsSelected = false;
+                        topItem.Selection.SelectedChild = item.GetModel();
+
+                        item.Selection.IsSelected = true;
+                        item.Selection.SelectedChild = null;
+
+                        _CurrentPath.Add(item);
+                        newSelectedLocation = item;
+                        break;
+                    }
+                }
+            }
+
+            await UpdateListOfOverflowableRootItemsAsync(_CurrentPath.Items, newSelectedLocation);
+
+            if (BrowseEvent != null)
+                BrowseEvent(this, new BrowsingEventArgs(newSelectedLocation.GetModel(),
+                                                        false, BrowseResult.Complete));
+
+            return BrowseResult.Complete;
+        }
+
+        private async Task<BrowseResult> InternalNavigateAsyncToNewLocationAsync(
+            BreadcrumbTreeItemViewModel desktopRootItem,
+            IDirectoryBrowser[] modelLocations)
+        {
+            if (modelLocations == null)
+                return BrowseResult.InComplete;
+
+            if (modelLocations.Length <= 0)
+                return BrowseResult.InComplete;
+
+            // First location needs to be a second level root item (This PC, Desktop, Music or such)
+            BreadcrumbTreeItemViewModel secLevelRootItem = null;
+            var secLevelRootItems = desktopRootItem.Entries.All.Where(i => i.EqualsLocation(modelLocations[0]));
+            if (secLevelRootItems.Count() > 0)
+                secLevelRootItem = secLevelRootItems.First();
+            else
+                return BrowseResult.InComplete;
+
+            // Count=0: Indicates that Desktop root (This PC is selected) item is destination of selection
+            // locationRootItem Indicates a 2nd Level root item directly under the Desktop
+            // Either case: Clear Path, insert DesktopRoot + (ThisPC or 2ndLevelRootItem)
+            if (modelLocations.Length == 1)
+            {
+                await SelectSecLevelRootItem(desktopRootItem, secLevelRootItem);
+
+                if (BrowseEvent != null)
+                    BrowseEvent(this, new BrowsingEventArgs(modelLocations[0], false, BrowseResult.Complete));
+
+                return BrowseResult.Complete;
+            }
+
+            foreach (var item in _CurrentPath.Items) // Reset Selection states from last selection
+            {
+                item.Selection.IsSelected = false;
+                item.Selection.SelectedChild = null;
+            }
+
+            var targetPath = await FindLoadTargetTreeViewModelItems(modelLocations, secLevelRootItem);
+            if (targetPath.Count == 0)
+                return BrowseResult.InComplete;
+
+            // Chain new path items by their SelectedChild property
+            for (int i = 0; i < targetPath.Count - 1; i++)
+            {
+                targetPath[i].Selection.IsSelected = false;
+                targetPath[i].Selection.SelectedChild = targetPath[i + 1].GetModel();
+            }
+
+            // Select last item and make sure there is no further selected child
+            targetPath[targetPath.Count - 1].Selection.IsSelected = true;
+            targetPath[targetPath.Count - 1].Selection.SelectedChild = null;
+
+            _CurrentPath.Clear();               // Push new path items into current path
+            _CurrentPath.Add(desktopRootItem);
+
+            foreach (var item in targetPath)
+                _CurrentPath.Add(item);
+
+            await UpdateListOfOverflowableRootItemsAsync(_CurrentPath.Items,
+                                                         targetPath[targetPath.Count - 1]);
+
+            if (BrowseEvent != null)
+                BrowseEvent(this, new BrowsingEventArgs(modelLocations[modelLocations.Length - 1], false, BrowseResult.Complete));
+
+            return BrowseResult.Complete;
+        }
+
+        /// <summary>
+        /// Find a location that may be completely unrelated to the current location.
+        /// Load all sub-items beginning at the root and select the destination.
+        /// </summary>
+        /// <param name="desktopRootItem"></param>
         /// <param name="location"></param>
         /// <returns></returns>
-        private async Task<BrowseResult> InternalNavigateToAsync(
-            IDirectoryBrowser location,
-            HintDirection direction = HintDirection.Unrelated,
-            int ihintLevel = -1)
+        private async Task<BrowseResult> InternalNavigateAsyncToNewLocationAsync(
+            BreadcrumbTreeItemViewModel desktopRootItem,
+            IDirectoryBrowser location)
         {
-            Logger.InfoFormat("'{0}'", location.FullName);
+            if (location == null)
+                return BrowseResult.InComplete;
 
-            await _Semaphore.WaitAsync();
-            try
+            // See if requested location is a second level root item (This PC, Desktop, Music or such)
+            BreadcrumbTreeItemViewModel secLevelRootItem = null;
+            var secLevelRootItems = desktopRootItem.Entries.All.Where(i => i.EqualsLocation(location));
+            if (secLevelRootItems.Count() > 0)
+                secLevelRootItem = secLevelRootItems.First();
+
+            List<string> locations = null;
+
+            if (secLevelRootItem == null)
+                locations = Browser.PathItemsAsParseNames(location);
+            else
+                locations = new List<string>();
+
+            // Count=0: Indicates that Desktop root (This PC is selected) item is destination of selection
+            // locationRootItem Indicates a 2nd Level root item directly under the Desktop
+            // Either case: Clear Path, insert DesktopRoot + (ThisPC or 2ndLevelRootItem)
+            if (locations.Count == 0 || secLevelRootItem != null)
             {
-                var root = BreadcrumbSubTree.Selection as ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>;
-                if (root == null)
-                    return BrowseResult.InComplete;
-
-                if (ihintLevel == -1)
-                {
-                    if (_CurrentPath == null)
-                        ihintLevel = 0;
-                    else
-                        ihintLevel = _CurrentPath.Count();
-                }
-
-                var rootSelector = BreadcrumbSubTree.Selection as ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>;
-                var items = await BrowseItemsAsync(BreadcrumbSubTree, location,
-                                                   direction, ihintLevel,
-                                                   _CurrentPath, _Comparer);
-
-                if (items.Count > 0)
-                {
-                    var selectedItem = items.Peek();
-
-                    if (_CurrentPath != null) // Get rid of old selected path
-                    {
-                        var lastSelectedItem = _CurrentPath.Peek();
-
-                        var lastList = _CurrentPath.Reverse().ToArray();
-                        var pathList = items.Reverse().ToArray();
-                        ICompareHierarchy<IDirectoryBrowser> Comparer = new IDirectoryHierarchyComparer();
-
-                        for (int i = 0; i < lastList.Length; i++)
-                        {
-                            if (i < pathList.Length)
-                            {
-                                var result = Comparer.CompareHierarchy(lastList[i].GetModel(), pathList[i].GetModel());
-
-                                if (result != HierarchicalResult.Current)
-                                {
-                                    lastList[i].Selection.SelectedChild = null;
-                                    lastList[i].Selection.IsSelected = false;
-                                }
-                                else
-                                {
-                                    // Special case if we look at last item in chain
-                                    // there cannot be a remaining child in the list
-                                    if (i == pathList.Length - 1)
-                                        lastList[i].Selection.SelectedChild = null;
-                                }
-
-                                if (selectedItem.GetModel().Equals(lastSelectedItem.GetModel()) == false)
-                                    lastList[i].Selection.IsSelected = false;
-                            }
-                            else
-                            {
-                                lastList[i].Selection.SelectedChild = null;
-                                lastList[i].Selection.IsSelected = false;
-                            }
-                        }
-
-                        for (int i = 0; i < pathList.Length; i++)
-                        {
-                            if (i > 0 && i < pathList.Length)
-                            {
-                                pathList[i].Selection.IsSelected = false;
-                                pathList[i - 1].Selection.SelectedChild = pathList[i].GetModel();
-                            }
-
-                            if (i == pathList.Length - 1)
-                            {
-                                pathList[i].Selection.IsSelected = true;
-                                pathList[0].Selection.SelectedChild = null;
-                            }
-                        }
-                    }
-
-                    _CurrentPath = items;
-
-                    var path = new Stack<ITreeSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>>();
-                    path.Push(selectedItem.Selection);
-                    await BreadcrumbSubTree.Selection.ReportChildSelectedAsync(path);
-                }
-
-                UpdateListOfOverflowableRootItems(rootSelector, items);
-
-                UpdateBreadcrumbSelectedPath();
+                await SelectSecLevelRootItem(desktopRootItem, secLevelRootItem);
 
                 if (BrowseEvent != null)
                     BrowseEvent(this, new BrowsingEventArgs(location, false, BrowseResult.Complete));
 
                 return BrowseResult.Complete;
             }
-            catch
-            {
-                if (BrowseEvent != null)
-                    BrowseEvent(this, new BrowsingEventArgs(location, false, BrowseResult.InComplete));
 
-                return BrowseResult.InComplete;
-            }
-            finally
+            var targetItems = locations.ToArray();
+            if (targetItems.Count() == 0)
+                return BrowseResult.InComplete;   // No target to navigate to ???
+
+            var firstTargetItem = targetItems.First();
+
+            var firstSourceItems = BreadcrumbSubTree.Entries.All.Where(i => i.EqualsParseName(firstTargetItem));
+            if (firstSourceItems.Count() == 0)
+                return BrowseResult.InComplete;   // No source tree root to navigate ???
+
+            var firstSourceItem = firstSourceItems.First();
+            if (firstSourceItem == null)
+                return BrowseResult.InComplete;   // No source tree root to navigate ???
+
+            foreach (var item in _CurrentPath.Items) // Reset Selection states from last selection
             {
-                _Semaphore.Release();
+                item.Selection.IsSelected = false;
+                item.Selection.SelectedChild = null;
             }
+
+            var targetPath = await FindLoadTargetTreeViewModelItems(targetItems, firstSourceItem);
+
+            // Chain new path items by their SelectedChild property
+            for (int i = 0; i < targetPath.Count - 1; i++)
+            {
+                targetPath[i].Selection.IsSelected = false;
+                targetPath[i].Selection.SelectedChild = targetPath[i + 1].GetModel();
+            }
+
+            // Select last item and make sure there is no further selected child
+            targetPath[targetPath.Count - 1].Selection.IsSelected = true;
+            targetPath[targetPath.Count - 1].Selection.SelectedChild = null;
+
+            _CurrentPath.Clear();               // Push new path items into current path
+            _CurrentPath.Add(desktopRootItem);
+
+            foreach (var item in targetPath)
+                _CurrentPath.Add(item);
+
+            await UpdateListOfOverflowableRootItemsAsync(_CurrentPath.Items, targetPath[targetPath.Count - 1]);
+
+            if (BrowseEvent != null)
+                BrowseEvent(this, new BrowsingEventArgs(location, false, BrowseResult.Complete));
+
+            return BrowseResult.Complete;
         }
 
         /// <summary>
-        /// Attempts to find the <paramref name="destination"/> underneath the given
-        /// root and returns a stack containing the path to the selected item including
-        /// items that were populated so far.
+        /// Do a level order traversal on source root tree to find new target
+        /// and re-load missing sub-items as we go deeper into the tree...
+        /// 
+        /// Update TreeViewModel of TreeItemViewModels along the given
+        /// locations in <paramref name="modelLocations"/>. The <paramref name="firstSourceItem"/>
+        /// represents the root item along which this tree is to be updated/reloaded.
+        /// 
+        /// Use of this method is recommended only if a previous method has confirmed the
+        /// path in <paramref name="modelLocations"/> to be valid - there is no second verification
+        /// on existance in this method.
         /// </summary>
-        /// <param name="root"></param>
-        /// <param name="destination"></param>
+        /// <param name="modelLocations"></param>
+        /// <param name="firstSourceItem"></param>
         /// <returns></returns>
-        private async Task<Stack<BreadcrumbTreeItemViewModel>> BrowseItemsAsync(
-            BreadcrumbTreeItemViewModel root,
-            IDirectoryBrowser destination,
-            HintDirection direction,
-            int ihintLevel,
-            Stack<BreadcrumbTreeItemViewModel> currentPath,
-            ICompareHierarchy<IDirectoryBrowser> Comparer)
+        private static async Task<List<BreadcrumbTreeItemViewModel>> FindLoadTargetTreeViewModelItems(
+                                        IDirectoryBrowser[] modelLocations,
+                                        BreadcrumbTreeItemViewModel firstSourceItem)
         {
+            List<BreadcrumbTreeItemViewModel> targetPath = new List<BreadcrumbTreeItemViewModel>();
             Queue<Tuple<int, BreadcrumbTreeItemViewModel>> queue = new Queue<Tuple<int, BreadcrumbTreeItemViewModel>>();
-            Stack<BreadcrumbTreeItemViewModel> path = new Stack<BreadcrumbTreeItemViewModel>();
 
-            var ret = root;
-            int initLevel = 0;
-            BreadcrumbTreeItemViewModel matchedItem = null;
-
-            if (direction == HintDirection.Down || direction == HintDirection.Up)
-            {
-                // Put current path into output stack and continue searching below current path
-                foreach (var item in currentPath.ToArray().Reverse())
-                {
-                    path.Push(item);
-                    initLevel++;
-
-                    if (direction == HintDirection.Up) // Found target item? -> return completed path
-                    {
-                        var cmpResult = Comparer.CompareHierarchy(item.GetModel(), destination);
-                        if (cmpResult == HierarchicalResult.Current)
-                            return path;
-                    }
-
-                    // Found level down hint ??? Lets search from here
-                    if (direction == HintDirection.Down && initLevel == (ihintLevel+1))
-                        break;
-                }
-
-                // This should always result in finding the next Child item
-                // and the next match should be matched with Current (end of retrieval)
-                matchedItem = GetBestMatch(destination, Comparer, path.Peek());
-            }
-
-            // But lets consider rolling back to generic algorithm if something went wrong before
-            if (direction != HintDirection.Unrelated)
-            {
-                if (matchedItem == null)
-                {
-                    path.Clear();
-                    initLevel = 0;
-                    direction = HintDirection.Unrelated;
-                }
-            }
-
-            // Initialize generic search from root ...
-            if (direction == HintDirection.Unrelated)
-            {
-                // Level 0 Root should always be pushed since everything's under DesktopRoot item
-                path.Push(root);
-
-                // Check if destination is root because this means we are done here
-                if (ShellBrowser.DesktopDirectory.Equals(destination) == true)
-                    return path;
-
-                matchedItem = GetBestMatch(destination, Comparer, root);
-            }
-
-            if (matchedItem != null)
-                queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(initLevel, matchedItem));
-            else
-            {
-//// TODO XXX
-////                throw new NotImplementedException("Attempt Refresh - Reload before giving up here...");
-            }
-
+            queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(0, firstSourceItem));
             while (queue.Count() > 0)
             {
-                var queueItem = queue.Dequeue();
-                int iLevel = queueItem.Item1;
-                BreadcrumbTreeItemViewModel current = queueItem.Item2;
+                var deQueuedItem = queue.Dequeue();
+                int iLevel = deQueuedItem.Item1;
+                var current = deQueuedItem.Item2;
 
-                var result = Comparer.CompareHierarchy(current.GetModel(), destination);
-
-                // Found an item along the way?
-                // Search on sub-tree items from an item that indicates selected children
-                if (result == HierarchicalResult.Child)
+                // Process the node
+                if (current.EqualsLocation(modelLocations[iLevel]) == true)
                 {
-                    path.Push(current);
+                    targetPath.Add(current);
 
                     if (current.Entries.IsLoaded == false)
                         await current.Entries.LoadAsync();
 
-                    queue.Clear();
-                    matchedItem = GetBestMatch(destination, Comparer, current);
+                    // Find next match in next level if any
+                    if (modelLocations.Length > (iLevel + 1))
+                    {
+                        BreadcrumbTreeItemViewModel matchedItem = null;
+                        foreach (var item in current.Entries.All)
+                        {
+                            if (item.EqualsLocation(modelLocations[iLevel + 1]))
+                            {
+                                matchedItem = item;
+                                break;
+                            }
+                        }
 
-                    if (matchedItem != null)
-                        queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(iLevel + 1, matchedItem));
-                    else
-                    {
-                        throw new NotImplementedException("Attempt Refresh - Reload before giving up here...");
-                    }
-                }
-                else  // Found what we where looking for?
-                {
-                    if (result == HierarchicalResult.Current)
-                    {
-                        path.Push(current);
-                        return path;
+                        if (matchedItem != null)
+                        {
+                            queue.Clear();
+                            queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(iLevel + 1, matchedItem));
+                        }
                     }
                 }
             }
 
-            return path;
+            return targetPath;
         }
 
-        private BreadcrumbTreeItemViewModel GetBestMatch(
-            IDirectoryBrowser destination,
-            ICompareHierarchy<IDirectoryBrowser> Comparer,
-            BreadcrumbTreeItemViewModel currentItem)
+        /// <summary>
+        /// Do a level order traversal on source root tree to find new target
+        /// and re-load missing sub-items as we go deeper into the tree...
+        /// </summary>
+        /// <param name="targetItems"></param>
+        /// <param name="firstSourceItem"></param>
+        /// <returns></returns>
+        private static async Task<List<BreadcrumbTreeItemViewModel>> FindLoadTargetTreeViewModelItems(
+                                        string[] targetItems,
+                                        BreadcrumbTreeItemViewModel firstSourceItem)
         {
-            BreadcrumbTreeItemViewModel ret = null;
+            List<BreadcrumbTreeItemViewModel> targetPath = new List<BreadcrumbTreeItemViewModel>();
+            Queue<Tuple<int, BreadcrumbTreeItemViewModel>> queue = new Queue<Tuple<int, BreadcrumbTreeItemViewModel>>();
 
-            foreach (var item in currentItem.Entries.All)
+            queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(0, firstSourceItem));
+            while (queue.Count() > 0)
             {
-                var itemResult = Comparer.CompareHierarchy(item.GetModel(), destination);
-                if (itemResult == HierarchicalResult.Child)
-                    ret = item;
-                else
+                var deQueuedItem = queue.Dequeue();
+                int iLevel = deQueuedItem.Item1;
+                var current = deQueuedItem.Item2;
+
+                // Process the node
+                if (current.EqualsParseName(targetItems[iLevel]) == true)
                 {
-                    if (itemResult == HierarchicalResult.Current)
-                        return item;
+                    targetPath.Add(current);
+
+                    if (current.Entries.IsLoaded == false)
+                        await current.Entries.LoadAsync();
+
+                    // Find next match in next level if any
+                    if (targetItems.Length > (iLevel + 1))
+                    {
+                        BreadcrumbTreeItemViewModel matchedItem = null;
+                        foreach (var item in current.Entries.All)
+                        {
+                            if (item.EqualsParseName(targetItems[iLevel + 1]))
+                            {
+                                matchedItem = item;
+                                break;
+                            }
+                        }
+
+                        if (matchedItem != null)
+                        {
+                            queue.Clear();
+                            queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(iLevel + 1, matchedItem));
+                        }
+                    }
                 }
             }
 
-            return ret;
+            return targetPath;
+        }
+
+        /// <summary>
+        /// Selects a given item that is directly under the root of the desktop root.
+        /// 
+        /// This can be a special case because
+        /// 1) 'This PC' should always be selected by default
+        ///    if there is a need for a fallback option from fatal errors.
+        /// 
+        /// 2) A Second Level Root item like a (folder) on the current user's desktop
+        /// should be displayed with the path: '> (folder) >'
+        ///             and not with the path: '> This PC > C: > Users > (User) > Desktop > (folder) >'
+        /// </summary>
+        /// <param name="desktopRootItem"></param>
+        /// <param name="secLevelRootItem"></param>
+        /// <returns></returns>
+        private async Task SelectSecLevelRootItem(BreadcrumbTreeItemViewModel desktopRootItem,
+                                                  BreadcrumbTreeItemViewModel secLevelRootItem)
+        {
+            if (secLevelRootItem == null)
+            {
+                var thisPC = desktopRootItem.Entries.All.Where(i => i.EqualsParseName(KF_ParseName_IID.MyComputerFolder));
+                secLevelRootItem = thisPC.First();
+            }
+
+            foreach (var item in _CurrentPath.Items)      // Reset Selection states from last selection
+            {
+                item.Selection.IsSelected = false;
+                item.Selection.SelectedChild = null;
+            }
+
+            // Get thisPC item and set its selection states
+            secLevelRootItem.Selection.IsSelected = true;
+            BreadcrumbSubTree.Selection.SelectedChild = secLevelRootItem.GetModel();
+
+            _CurrentPath.Clear();
+            _CurrentPath.Add(desktopRootItem);   // set the current path to thisPC
+            _CurrentPath.Add(secLevelRootItem); // set the current path to thisPC
+
+            await UpdateListOfOverflowableRootItemsAsync(_CurrentPath.Items, secLevelRootItem);
         }
 
         /// <summary>
         /// Updates the source of the root drop down list by merging the current
         /// root items with the new list of overflowable path items.
         /// </summary>
-        /// <param name="rootSelector">Is the <see cref="ITreeRootSelector{VM,M}"/> that contains
-        /// the OverflowedAndRootItems list to be updated.</param>
         /// <param name="items">Is the list of new pathitems to be include in OverflowedAndRootItems</param>
-        private void UpdateListOfOverflowableRootItems(
-            ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser> rootSelector,
-            Stack<BreadcrumbTreeItemViewModel> items)
+        /// <param name="selectedItem"></param>
+        private async Task UpdateListOfOverflowableRootItemsAsync(
+            IEnumerable<BreadcrumbTreeItemViewModel> items,
+            BreadcrumbTreeItemViewModel selectedItem)
         {
             // Update list of overflowable items for bindings from converter on rootdropdownlist
             // 1) Get all rootitems minus seperator minus overflowable pathitems
             List<BreadcrumbTreeItemViewModel> rootItems = new List<BreadcrumbTreeItemViewModel>();
-            if (rootSelector.OverflowedAndRootItems.Count() > 0)
+            if (_OverflowedAndRootItems.Count() > 0)
             {
-                foreach (var item in rootSelector.OverflowedAndRootItems)
+                foreach (var item in _OverflowedAndRootItems)
                 {
                     if (item != null)
                     {
@@ -600,111 +1161,170 @@ namespace BreadcrumbTestLib.ViewModels.Breadcrumbs
             var overflowedItems = items.Where(i => i.Selection.IsRoot == false);
 
             // 3) merge both lists from 1) and 2) into updated overflowable list
-            rootSelector.UpdateOverflowedItems(rootItems, overflowedItems);
-        }
+            UpdateOverflowedItems(rootItems, overflowedItems);
 
-        /// <summary>
-        /// Searches the list of Entries.All items below root and returns the item with
-        /// the Selection.IsSelected property - requires that each item towards the result
-        /// item has the Selection.IsChildSelected property set.
-        /// </summary>
-        /// <param name="root"></param>
-        /// <param name="selectedChild">Returns item with Selection.IsSelected property set or null.</param>
-        /// <returns>Last item with Selection.IsChildSelected property set or root</returns>
-        public BreadcrumbTreeItemViewModel FindItemIsSelected(BreadcrumbTreeItemViewModel root,
-                                                          out BreadcrumbTreeItemViewModel selectedChild)
-        {
-            selectedChild = null;
-            var ret = root;
-            Queue<Tuple<int, BreadcrumbTreeItemViewModel>> queue = new Queue<Tuple<int, BreadcrumbTreeItemViewModel>>();
+            // Update selection of currently selected item and second level root item
+            await ReportChildSelectedAsync(selectedItem.Selection);
 
-            if (root != null)
-                queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(0, root));
+            // Update last selected item in chain of selected items and SuggestPath
+            BreadcrumbSelectedItem = selectedItem;
+            var model = selectedItem.GetModel();
 
-            while (queue.Count() > 0)
+            // select second level root item in RootDropDownList (if available)
+            if (items.Count() >= 2)
             {
-                var queueItem = queue.Dequeue();
-                int iLevel = queueItem.Item1;
-                BreadcrumbTreeItemViewModel current = queueItem.Item2;
-
-                // Search on sub-tree items from an item that indicates selected children
-                if (current.Selection.IsChildSelected == true)
-                {
-                    ret = current;
-
-                    foreach (var item in current.Entries.All)
-                        queue.Enqueue(new Tuple<int, BreadcrumbTreeItemViewModel>(iLevel + 1, item));
-                }
-
-                if (current.Selection.IsSelected == true)
-                    selectedChild = current;
+                SelectedRootValue = items.ElementAt(1).Selection.Value;
             }
-
-            return ret;
+            else
+                SelectedRootValue = null;
         }
 
         /// <summary>
-        /// Method updates the BreadcrumbSelectedPath property for debugging purposes.
+        /// Update the root drop down list with the list of root items
+        /// and overflowable (non-root) items.
         /// </summary>
-        private void UpdateBreadcrumbSelectedPath()
-        {
-            var selector = BreadcrumbSubTree.Selection as ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>;
-
-            if (selector != null)
-            {
-                if (selector.SelectedViewModel != null)
-                {
-                    var pathItems = selector.SelectedViewModel.GetPathItems();
-
-                    string output = "";
-                    foreach (var item in pathItems)
-                    {
-                        var itemString = string.Format("{0} {1}", item.Header,
-                            (item.Selection.IsSelected == false ? "" : "(Selected)"));
-
-                        output = (string.IsNullOrEmpty(output) ?
-                            itemString :
-                            output + "/" + itemString);
-                    }
-
-                    // Gets the complete path string below root item selector.RootSelector.SelectedValue.FullName;
-
-                    BreadcrumbSelectedPath = output;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Method executes when the text path portion in the
-        /// Breadcrumb control has been edit.
-        /// </summary>
-        private void OnSuggestPathChanged()
+        /// <param name="rootItems"></param>
+        /// <param name="pathItems"></param>
+        private void UpdateOverflowedItems(IEnumerable<BreadcrumbTreeItemViewModel> rootItems,
+                                          IEnumerable<BreadcrumbTreeItemViewModel> pathItems)
         {
             Logger.InfoFormat("_");
 
-            /***
-            if (!ShowBreadcrumb)
+            Application.Current.Dispatcher.Invoke(() =>
             {
-              Task.Run(async () =>
-              {
-                foreach (var p in _profiles)
-                  if (p.MatchPathPattern(SuggestedPath))
-                  {
-                    if (String.IsNullOrEmpty(SuggestedPath) && Entries.AllNonBindable.Count() > 0)
-                      SuggestedPath = Entries.AllNonBindable.First().EntryModel.FullPath;
+                _OverflowedAndRootItems.Clear();
+            });
 
-                    var found = await p.ParseThenLookupAsync(SuggestedPath, CancellationToken.None);
-                    if (found != null)
-                    {
-                      _sbox.Dispatcher.BeginInvoke(new System.Action(() => { SelectAsync(found); }));
-                      ShowBreadcrumb = true;
-                      BroadcastDirectoryChanged(EntryViewModel.FromEntryModel(found));
-                    }
-                    //else not found
-                  }
-              });//.Start();
+            // Get all items that belong to the current path and add them into the
+            // OverflowedAndRootItems collection
+            // The item.IsOverflowed property is (re)-set by OverflowableStackPanel
+            // when the UI changes - a converter in the binding shows only those entries
+            // in the root drop down list with item.IsOverflowed == true
+            foreach (var p in pathItems)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _OverflowedAndRootItems.Add(p);
+                });
             }
-             ***/
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Insert Separator between Root and Overflowed Items
+                _OverflowedAndRootItems.Add(null);
+            });
+
+            foreach (var p in rootItems)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _OverflowedAndRootItems.Add(p);
+                });
+            }
+        }
+
+        /// <summary>
+        /// Method is invoked at the end of each navigational change when the
+        /// control's viewmodel has retrieved all required items and is about
+        /// to change the selection to complete the cycle.
+        /// </summary>
+        /// <param name="pathItem"></param>
+        private async Task ReportChildSelectedAsync(
+            ITreeSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser> pathItem)
+        {
+            Logger.InfoFormat("{0}", pathItem);
+
+            try
+            {
+                if (pathItem != null)
+                {
+                    SelectedRootViewModel = pathItem.ViewModel;
+                    SelectedRootValue = pathItem.Value;
+                }
+                else
+                {
+                    SelectedRootViewModel = null;
+                    SelectedRootValue = null;
+                }
+            }
+            catch (Exception exp)
+            {
+                Logger.Error(exp);
+            }
+
+            // This should occur in the last step of every navigational handling
+            // since it informs the breadcrumb control to update its view (IsOverflown property)
+            if (this.SelectionChanged != null)
+                this.SelectionChanged(this, EventArgs.Empty);
+
+            if (pathItem.EntryHelper.IsLoaded == false)
+                await pathItem.EntryHelper.LoadAsync();
+        }
+
+        private async Task RootDropDownSelectionChangedCommand_Executed(BreadcrumbTreeItemViewModel selectedFolder)
+        {
+            var hintDirection = HintDirection.Unrelated;
+            BreadcrumbTreeItemViewModel toBeSelectedLocation = null;
+
+            // We can opimize browsing if target is in current path
+            if (selectedFolder.Selection.IsOverflowed && selectedFolder.Selection.IsRoot == false)
+            {
+                // The selected root item is an overflowed root item so we move up towards the item that
+                // is already part of the path
+                hintDirection = HintDirection.Up;      // Hint optimization here ...
+                toBeSelectedLocation = selectedFolder;
+            }
+
+            if (_NavigationController != null)
+            {
+                var cancelTokenSrc = _NavigationController.GetCancelToken();
+                var token = CancellationToken.None;
+
+                var request = new BrowseRequest<IDirectoryBrowser>(selectedFolder.GetModel(), RequestType.Navigational,
+                                                                    token, cancelTokenSrc, null);
+
+                var NaviTask = Task.Factory.StartNew(async (s) =>
+                {
+                    await this.NavigateToAsync(request, "BreadcrumbViewModel.RootDropDownSelectionChangedCommand",
+                        hintDirection, toBeSelectedLocation);
+
+                }, token, TaskCreationOptions.LongRunning);
+
+                request.SetTask(NaviTask);
+                _NavigationController.QueueTask(request);
+            }
+            else
+            {
+                var request = new BrowseRequest<IDirectoryBrowser>(selectedFolder.GetModel(), RequestType.Navigational);
+
+                await this.NavigateToAsync(request, "BreadcrumbViewModel.RootDropDownSelectionChangedCommand",
+                    hintDirection, toBeSelectedLocation);
+            }
+        }
+
+        /// <summary>
+        /// Adds anpther recent location into the maintained list of recent locations.
+        /// </summary>
+        /// <param name="currPath"></param>
+        private void AddRecentLocation(string currPath)
+        {
+            // Move item to first spot if it exists already
+            var items =_RecentLocationItems.Where(i => string.Compare(i, currPath, true) == 0);
+            if (items.Any())
+            {
+                _RecentLocationItems.Remove(items.First());
+                _RecentLocationItems.Insert(0, currPath);
+
+                return;
+            }
+
+            if (_RecentLocationItems.Count > 99) // Make sure list does not grow beyond 99 elements
+            {
+                for (int i = 98; i < _RecentLocationItems.Count; i++)
+                    _RecentLocationItems.RemoveAt(i);
+            }
+
+            _RecentLocationItems.Insert(0, currPath);
         }
         #endregion methods
     }

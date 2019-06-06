@@ -7,9 +7,9 @@
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
-    using System.Windows.Input;
     using BmLib.Enums;
     using System.Windows;
+    using System.Windows.Threading;
 
     /// <summary>
     /// Implements the viewmodel template that drives every BreadcrumbTreeItem control
@@ -25,8 +25,6 @@
         protected static readonly log4net.ILog Logger = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
         protected Func<bool, object, Task<IEnumerable<VM>>> _loadSubEntryFunc;
-
-        private bool _clearBeforeLoad = false;
 
         private bool _isLoaded = false;
         private bool _isExpanded = false;
@@ -49,48 +47,37 @@
         {
             _loadSubEntryFunc = loadSubEntryFunc;
 
-            _All = new FastObservableCollection<VM>
-            {
-                default(VM)
-            };
-
-            this.CancelCommand = new RelayCommand(obj =>
-            {
-                var token = _lastCancellationToken;
-
-                if (token != null)
-                    token.Cancel();
-            });
+            _All = new FastObservableCollection<VM>();
         }
 
-        /// <summary>
-        /// Class constructor
-        /// </summary>
-        /// <param name="loadSubEntryFunc"></param>
-        public BreadcrumbTreeItemHelperViewModel(Func<bool, Task<IEnumerable<VM>>> loadSubEntryFunc)
-          : this((b, __) => loadSubEntryFunc(b))
-        {
-        }
+////        /// <summary>
+////        /// Class constructor
+////        /// </summary>
+////        /// <param name="loadSubEntryFunc"></param>
+////        public BreadcrumbTreeItemHelperViewModel(Func<bool, Task<IEnumerable<VM>>> loadSubEntryFunc)
+////          : this((b, __) => loadSubEntryFunc(b))
+////        {
+////        }
 
-        /// <summary>
-        /// Class constructor
-        /// </summary>
-        /// <param name="loadSubEntryFunc"></param>
-        public BreadcrumbTreeItemHelperViewModel(Func<Task<IEnumerable<VM>>> loadSubEntryFunc)
-          : this(_ => loadSubEntryFunc())
-        {
-        }
+////        /// <summary>
+////        /// Class constructor
+////        /// </summary>
+////        /// <param name="loadSubEntryFunc"></param>
+////        public BreadcrumbTreeItemHelperViewModel(Func<Task<IEnumerable<VM>>> loadSubEntryFunc)
+////          : this(_ => loadSubEntryFunc())
+////        {
+////        }
 
-        /// <summary>
-        /// Class constructor from entries parameters.
-        /// </summary>
-        /// <param name="entries"></param>
-        public BreadcrumbTreeItemHelperViewModel(params VM[] entries)
-            : this()
-        {
-            _isLoaded = true;
-            _All.AddItems(entries);
-        }
+////        /// <summary>
+////        /// Class constructor from entries parameters.
+////        /// </summary>
+////        /// <param name="entries"></param>
+////        public BreadcrumbTreeItemHelperViewModel(params VM[] entries)
+////            : this()
+////        {
+////            _isLoaded = true;
+////            _All.AddItems(entries);
+////        }
 
         /// <summary>
         /// Hidden standard class constructor
@@ -125,18 +112,7 @@
             {
                 if (_isExpanded != value)
                 {
-                    try
-                    {
-                        Logger.InfoFormat("{0} -> {1}", value, _isExpanded);
-                        ////                        Console.WriteLine("{0}: {1} -> {2}", this.ToString(), value, _isExpanded);
-
-                        ////if (value && _isExpanded == false)
-                        ////    AsyncUtils.RunAsync(() => this.LoadAsync());
-                    }
-                    catch (Exception exc)
-                    {
-                        Logger.Error(exc);
-                    }
+                    Logger.InfoFormat("{0} -> {1}", value, _isExpanded);
 
                     _isExpanded = value;
                     NotifyPropertyChanged(() => IsExpanded);
@@ -182,15 +158,6 @@
                     NotifyPropertyChanged(() => IsLoading);
                 }
             }
-        }
-
-        /// <summary>
-        /// Gets the command that can cancel the current LoadASync() operation.
-        /// </summary>
-        public ICommand CancelCommand
-        {
-            get;
-            private set;
         }
 
         /// <summary>
@@ -241,15 +208,6 @@
 
                     if (!_isLoaded || force)
                     {
-
-                        if (_clearBeforeLoad)
-                        {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                _All.Clear();
-                            });
-                        }
-
                         await Application.Current.Dispatcher.Invoke(async () =>
                         {
                             try
@@ -301,6 +259,7 @@
                 {
                     _All.Clear();
                 });
+
                 _isLoaded = false;
             }
         }
@@ -327,7 +286,7 @@
                     break;
 
                 default:
-                    throw new NotSupportedException("UpdateMode");
+                    throw new NotSupportedException(updateMode.ToString());
             }
         }
 

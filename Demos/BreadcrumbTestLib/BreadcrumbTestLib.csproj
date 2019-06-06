@@ -43,19 +43,16 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
+    <Reference Include="WSF, Version=1.1.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Dirkster.WSF.1.1.1\lib\net4\WSF.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Behaviors\TreeViewItemBehaviour.cs" />
-    <Compile Include="Models\BrowseRequest.cs" />
-    <Compile Include="Models\BrowseResult.cs" />
-    <Compile Include="Models\BrowsingEventArgs.cs" />
-    <Compile Include="Models\FinalBrowseResult.cs" />
     <Compile Include="Models\HintDirection.cs" />
-    <Compile Include="Models\ICanNavigate.cs" />
     <Compile Include="Models\IRoot.cs" />
+    <Compile Include="Models\LocationIndicator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SystemIO\DiskTreeNodeViewModel.cs" />
-    <Compile Include="SystemIO\PathComparer.cs" />
     <Compile Include="Tasks\OneTaskLimitedScheduler.cs" />
     <Compile Include="Utils\AsyncLock.cs" />
     <Compile Include="Utils\AsyncSemaphore.cs" />
@@ -64,41 +61,36 @@
     <Compile Include="ViewModels\AppViewModel.cs" />
     <Compile Include="ViewModels\Base\RelayCommand.cs" />
     <Compile Include="ViewModels\Base\ViewModelBase.cs" />
+    <Compile Include="ViewModels\BreadCrumbControllerViewModel.cs" />
+    <Compile Include="ViewModels\Breadcrumbs\BreadcrumbTreeItemPath.cs" />
     <Compile Include="ViewModels\Breadcrumbs\BreadcrumbViewModel.cs" />
     <Compile Include="ViewModels\Breadcrumbs\BreadcrumbTreeItemHelperViewModel.cs" />
-    <Compile Include="ViewModels\Breadcrumbs\IDirectoryHierarchyComparer.cs" />
     <Compile Include="ViewModels\Breadcrumbs\BreadcrumbTreeItemViewModel.cs" />
-    <Compile Include="ViewModels\Breadcrumbs\ProgressViewModel.cs" />
-    <Compile Include="ViewModels\Breadcrumbs\TreeSelectors\TreeRootSelectorViewModel.cs" />
-    <Compile Include="ViewModels\Breadcrumbs\TreeSelectors\TreeSelectorViewModel.cs" />
-    <Compile Include="ViewModels\Interfaces\IBreadcrumbViewModel.cs" />
+    <Compile Include="ViewModels\Interfaces\IBreadcrumbTreeItemPath.cs" />
+    <Compile Include="ViewModels\Breadcrumbs\ShellPathValidationRule.cs" />
     <Compile Include="ViewModels\Interfaces\IBreadcrumbTreeItemViewModel.cs" />
-    <Compile Include="ViewModels\Interfaces\IEntryHierarchyComparer.cs" />
-    <Compile Include="ViewModels\Interfaces\IProgressViewModel.cs" />
+    <Compile Include="ViewModels\SuggestionListItem.cs" />
+    <Compile Include="ViewModels\SuggestSourceDirectory.cs" />
+    <Compile Include="ViewModels\SuggestQueryResultModel.cs" />
+    <Compile Include="ViewModels\Breadcrumbs\ProgressViewModel.cs" />
+    <Compile Include="ViewModels\Breadcrumbs\TreeSelectors\TreeSelectorViewModel.cs" />
+    <Compile Include="ViewModels\BrowseRequestTaskQueueViewModel.cs" />
+    <Compile Include="ViewModels\Interfaces\IBreadcrumbViewModel.cs" />
+    <Compile Include="ViewModels\Interfaces\IBreadcrumbTreeItemHelperViewModel.cs" />
     <Compile Include="ViewModels\Interfaces\ISupportTreeSelector.cs" />
-    <Compile Include="ViewModels\Interfaces\ITreeRootSelector.cs" />
     <Compile Include="ViewModels\Interfaces\ITreeSelector.cs" />
     <Compile Include="Views\DemoView.xaml.cs">
       <DependentUpon>DemoView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Views\DiskTestView.xaml.cs">
-      <DependentUpon>DiskTestView.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\ExTestView.xaml.cs">
-      <DependentUpon>ExTestView.xaml</DependentUpon>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="SystemIO\folder.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\BmLib\BmLib.csproj">
       <Project>{0f864f5c-ce7a-438b-b943-620d3b13fa11}</Project>
       <Name>BmLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\ShellBrowser\ShellBrowserLib\ShellBrowserLib.csproj">
-      <Project>{2fb5c730-5836-4ed7-abca-2b9669e8c0a6}</Project>
-      <Name>ShellBrowserLib</Name>
+    <ProjectReference Include="..\SSCCoreLib\SSCoreLib.csproj">
+      <Project>{24ae0c23-875a-4718-bf04-2ccec08def05}</Project>
+      <Name>SSCoreLib</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
@@ -106,17 +98,8 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Views\DiskTestView.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\ExTestView.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
   </ItemGroup>
   <ItemGroup>
-    <None Include="BreadcrumbTestLib.cd" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

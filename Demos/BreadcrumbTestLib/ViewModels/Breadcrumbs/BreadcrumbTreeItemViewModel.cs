@@ -6,13 +6,15 @@
     using BreadcrumbTestLib.ViewModels.Interfaces;
     using BreadcrumbTestLib.ViewModels.Breadcrumbs.TreeSelectors;
     using BreadcrumbTestLib.ViewModels.Base;
-    using ShellBrowserLib.Interfaces;
+    using WSF.Interfaces;
     using System;
     using BmLib.Interfaces;
     using BmLib.Enums;
     using BreadcrumbTestLib.Models;
     using System.Windows.Input;
-    using ShellBrowserLib;
+    using WSF;
+    using WSF.IDs;
+    using WSF.Enums;
 
     /// <summary>
     /// Class implements a ViewModel to manage a sub-tree of a Breadcrumb control.
@@ -23,8 +25,8 @@
     /// - a list of items below this item (<see cref="BreadcrumbTreeItemHelperViewModel{VM}"/>).
     /// </summary>
     public class BreadcrumbTreeItemViewModel : ViewModelBase,
-                                       ISupportBreadcrumbTreeItemViewModel<BreadcrumbTreeItemViewModel, IDirectoryBrowser>,
-                                       IDisposable
+                                               ISupportBreadcrumbTreeItemViewModel<BreadcrumbTreeItemViewModel, IDirectoryBrowser>,
+                                               IBreadcrumbTreeItemViewModel
     {
         #region fields
         /// <summary>
@@ -35,29 +37,15 @@
         private IDirectoryBrowser _dir;
         private string _header;
         private BreadcrumbTreeItemViewModel _rootNode, _parentNode;
-        private bool _disposed = false;
 
         // Instance of the root viewmodel - reference is used to invoke central tree related (navigational) methods
         private IRoot<IDirectoryBrowser> _Root;
 
-        private ICommand _ItemSelectionChangedCommand;
+        private ICommand _DropDownItemSelectedCommand;
         private ICommand _BreadcrumbTreeTreeItemClickCommand;
         #endregion fields
 
         #region constructors
-        /// <summary>
-        /// Standard class constructor.
-        /// Call the <see cref="InitRootAsync"/> method after construction to initialize
-        /// root items collection outside of the scope of object construction.
-        /// </summary>
-        internal BreadcrumbTreeItemViewModel(IRoot<IDirectoryBrowser> root)
-        {
-            _Root = root;
-            Entries = new BreadcrumbTreeItemHelperViewModel<BreadcrumbTreeItemViewModel>();
-            Selection = new TreeRootSelectorViewModel<BreadcrumbTreeItemViewModel, IDirectoryBrowser>
-                        (this.Entries);
-        }
-
         /// <summary>
         /// Class constructor from an available parentNode and directory model
         /// to recurse down on a given structure.
@@ -65,26 +53,31 @@
         /// <param name="dir"></param>
         /// <param name="parentNode"></param>
         internal BreadcrumbTreeItemViewModel(IDirectoryBrowser dir,
-                                              BreadcrumbTreeItemViewModel parentNode,
-                                              IRoot<IDirectoryBrowser> root
-                                              )
+                                             BreadcrumbTreeItemViewModel parentNode,
+                                             IRoot<IDirectoryBrowser> root
+                                            )
         {
-            Logger.InfoFormat("'{0}'", dir.FullName);
+            Logger.InfoFormat("FullName '{0}'", (dir != null ? dir.FullName : "(null)"));
 
             _Root = root;
             _dir = dir;
 
-            // If parentNode == null => Parent of Root is this item itself.
+            // If parentNode == null => Parent of Root is null
             _rootNode = parentNode == null ? this : parentNode._rootNode;
-
             _parentNode = parentNode;
-            Header = _dir.Label;
+
+            Header = (dir != null ? _dir.Label : string.Empty );
 
             Func<bool, object, Task<IEnumerable<BreadcrumbTreeItemViewModel>>> loadAsyncFunc = (isLoaded, parameter) => Task.Run(() =>
             {
                 try
                 {
-                    return ShellBrowser.GetChildItems(_dir.PathShell).Select(d => new BreadcrumbTreeItemViewModel(d, this, _Root));
+                    var subItemsList = Browser.GetChildItems(_dir.FullName, null, SubItemFilter.NameOnly, true);
+
+                    // FullName has preference for directory file system path over SpecialId
+                    // (if an item has both)
+                    // -> this is useful here to no relist SpecialItems below Desktop or other special items
+                    return subItemsList.Select(d => new BreadcrumbTreeItemViewModel(d, this, _Root));
                 }
                 catch (Exception exp)
                 {
@@ -95,17 +88,7 @@
 
             this.Entries = new BreadcrumbTreeItemHelperViewModel<BreadcrumbTreeItemViewModel>(loadAsyncFunc);
             this.Selection = new TreeSelectorViewModel<BreadcrumbTreeItemViewModel, IDirectoryBrowser>
-                                                    (_dir, this, this._parentNode.Selection, this.Entries);
-        }
-
-        /// <summary>
-        /// Class finalizer/destructor
-        /// When the object is eligible for finalization,
-        /// the garbage collector runs the Finalize method of the object. 
-        /// </summary>
-        ~BreadcrumbTreeItemViewModel()
-        {
-            Dispose();
+                                                    (_dir, this, this.Entries);
         }
         #endregion constructors
 
@@ -166,13 +149,13 @@
         /// Array of length 1 with an object of type <see cref="BreadcrumbTreeItemViewModel"/>
         /// object[1] = {new <see cref="BreadcrumbTreeItemViewModel"/>() }
         /// </summary>
-        public ICommand ItemSelectionChangedCommand
+        public ICommand DropDownItemSelectedCommand
         {
             get
             {
-                if (_ItemSelectionChangedCommand == null)
+                if (_DropDownItemSelectedCommand == null)
                 {
-                    _ItemSelectionChangedCommand = new RelayCommand<object>(async (param) =>
+                    _DropDownItemSelectedCommand = new RelayCommand<object>(async (param) =>
                     {
                         var parArray = param as object[];
                         if (parArray == null)
@@ -190,19 +173,26 @@
                         if (_Root.IsBrowsing == true)   // Selection change originates from viewmodel
                             return;                    // So, let ignore this one since its browsing anyways...
 
-                        int itemLevel = GetItemLevel();
+                        Logger.InfoFormat("selectedFolder {0}", selectedFolder);
 
-                        Logger.InfoFormat("itemLevel {0} selectedFolder {1}", itemLevel, selectedFolder);
-
-                        var request = new BrowseRequest<IDirectoryBrowser>(selectedFolder.GetModel());
-                        await _Root.NavigateToAsync(request,
-                                                    "BreadcrumbTreeItemViewModel.ItemSelectionChanged",
-                                                    HintDirection.Down, itemLevel);
-
-                    });
+                        await _Root.NavigateToScheduledAsync(selectedFolder.GetModel(),
+                                                             "BreadcrumbTreeItemViewModel.ItemSelectionChanged",
+                                                             HintDirection.Down, this);
+                    }
+                    //// Partial rollback from commit on 2018-10-30:
+                    //// https://github.com/Dirkster99/bm/commit/4ccb72b2ef6e500175cc99c63b37e2fa1d608e5a
+                    //// Not needed and causes timing problems since other elements in the tree receive the event
+                    //// ,(param) =>
+                    //// {
+                    ////     if (_Root.IsBrowsing == true)
+                    ////         return false;
+                    ////
+                    ////     return true;
+                    //// }
+                    );
                 }
 
-                return _ItemSelectionChangedCommand;
+                return _DropDownItemSelectedCommand;
             }
         }
 
@@ -225,11 +215,21 @@
 
                         Logger.InfoFormat("selectedFolder {0}", this);
 
-                        var request = new BrowseRequest<IDirectoryBrowser>(this.GetModel());
-                        await _Root.NavigateToAsync(request,
-                            "BreadcrumbTreeItemViewModel.BreadcrumbTreeTreeItemClickCommand",
-                            HintDirection.Up);
-                    });
+                        await _Root.NavigateToScheduledAsync(this.GetModel(),
+                                                             "BreadcrumbTreeItemViewModel.BreadcrumbTreeTreeItemClickCommand",
+                                                             HintDirection.Up, this);
+                    }
+                    //// Partial rollback from commit on 2018-10-30:
+                    //// https://github.com/Dirkster99/bm/commit/4ccb72b2ef6e500175cc99c63b37e2fa1d608e5a
+                    //// Not needed and causes timing problems since other elements in the tree receive the event
+                    //// ,(param) =>
+                    //// {
+                    ////     if (_Root.IsBrowsing == true)
+                    ////         return false;
+                    ////
+                    ////     return true;
+                    //// }
+                    );
                 }
 
                 return _BreadcrumbTreeTreeItemClickCommand;
@@ -309,10 +309,14 @@
         /// Gets all root items below the desktop item and makes them available
         /// in the <see cref="Entries"/> collection. The first available item
         /// in the retrieved collection (eg: 'PC') is selected.
+        /// 
+        /// This method should only be called on a root item of the breadcrumb tree to
+        /// initialize/construct a valid root of the tree(!!!)
         /// </summary>
         /// <param name="location"></param>
+        /// <param name="rootSelector"></param>
         /// <returns></returns>
-        public async Task InitRootAsync(IDirectoryBrowser location)
+        internal BreadcrumbTreeItemViewModel InitRoot(IDirectoryBrowser location)
         {
             try
             {
@@ -320,13 +324,15 @@
                 _dir = location;
                 Header = _dir.Label;
 
-                // and insert desktop sub-entries into Entries property
-                Entries.SetEntries(UpdateMode.Update,
-                    ShellBrowser.GetChildItems(_dir.PathShell).Select(d => new BreadcrumbTreeItemViewModel(d, this, _Root)).ToArray());
-                    //(filter out recycle bin entry if its not that useful...)
-                    //.Where(d => !d.Equals(DirectoryInfoExLib.Factory.RecycleBinDirectory))
+                var models = Browser.GetChildItems(_dir.PathShell, null, SubItemFilter.NameOnly, true)
+                                                // (filter out recycle bin and control panel entries since its not that useful...)
+                                                .Where(d => string.Compare(d.SpecialPathId, KF_ParseName_IID.RecycleBinFolder, true) != 0)
+                                                .Where(d => string.Compare(d.PathRAW, KF_ParseName_IID.ControlPanelFolder, true) != 0);
 
-                var selector = this.Selection as ITreeRootSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>;
+                var viewmodels = models.Select(d => new BreadcrumbTreeItemViewModel(d, this, _Root)).ToArray();
+
+                // and insert desktop sub-entries into Entries property
+                Entries.SetEntries(UpdateMode.Replace, viewmodels);
 
                 if (Entries.All.Count() > 0)
                 {
@@ -337,16 +343,14 @@
                     var firstRootItem = Entries.All.First();
                     firstRootItem.Selection.IsSelected = true;
 
-                    var path = new Stack<ITreeSelector<BreadcrumbTreeItemViewModel, IDirectoryBrowser>>();
-                    path.Push(firstRootItem.Selection);
-
-
-                    await this.Selection.ReportChildSelectedAsync(path);
+                    return firstRootItem;
                 }
             }
             catch
             {
             }
+
+            return null;
         }
 
         /// <summary>
@@ -357,6 +361,22 @@
         internal IDirectoryBrowser GetModel()
         {
             return _dir;
+        }
+
+        /// <summary>
+        /// Compares a given parse name with the parse names known in this object's model.
+        /// 
+        /// Considers case insensitive string matching for:
+        /// 1> SpecialPathId
+        ///   1.2> PathRAW (if SpecialPathId fails and CLSID may have been used to create this)
+        ///
+        /// 3> PathFileSystem
+        /// </summary>
+        /// <param name="parseName">True is a matching parse name was found and false if not.</param>
+        /// <returns></returns>
+        internal bool EqualsParseName(string parseName)
+        {
+            return _dir.EqualsParseName(parseName);
         }
 
         /// <summary>
@@ -383,57 +403,14 @@
             return list;
         }
 
-        #region Disposable Interfaces
-        /// <summary>
-        /// Standard dispose method of the <seealso cref="IDisposable" /> interface.
-        /// </summary>
-        public void Dispose()
+        internal bool EqualsLocation(IDirectoryBrowser location)
         {
-            Dispose(true);
+            return _dir.Equals(location);
         }
 
-        /// <summary>
-        /// Implements standard disposable method.
-        /// Source: http://www.codeproject.com/Articles/15360/Implementing-IDisposable-and-the-Dispose-Pattern-P
-        /// </summary>
-        /// <param name="disposing"></param>
-        protected virtual void Dispose(bool disposing)
+        public IParent GetParent()
         {
-            if (_disposed == false)
-            {
-                if (disposing == true)
-                {
-                    // Dispose of the model that defines this viemodel
-////                    if (_dir != null)
-////                        _dir.Dispose();
-
-                    _dir = null;
-                }
-
-                // There are no unmanaged resources to release, but
-                // if we add them, they need to be released here.
-            }
-
-            _disposed = true;
-
-            //// If it is available, make the call to the
-            //// base class's Dispose(Boolean) method
-            ////base.Dispose(disposing);
-        }
-        #endregion Disposable Interfaces
-
-        private int GetItemLevel()
-        {
-            int iLevel = 0;
-            var parent = _parentNode;
-            while (parent != null)
-            {
-                parent = parent._parentNode;
-                iLevel++;
-            }
-
-
-            return iLevel;
+            return _parentNode;
         }
         #endregion
     }

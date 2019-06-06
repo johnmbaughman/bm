@@ -37,14 +37,6 @@
                      ResourceId=HotTrack_SelectedBrush}"
                      options:Freeze="true"
                      Color="{DynamicResource {x:Static MLib_reskeys:ResourceKeys.ControlAccentColorKey}}"
-                     Opacity=".5"
-                     />
-
-    <SolidColorBrush x:Key="{ComponentResourceKey TypeInTargetAssembly={x:Type reskeys:ResourceKeys},
-                     ResourceId=HotTrack_HighlightBrush}"
-                     Color="{DynamicResource {x:Static MLib_reskeys:ResourceKeys.ControlAccentColorKey}}"
-                     options:Freeze="true"
-                     Opacity=".25"
                      />
 
     <!-- This color is applied to the drop down button (Hottrack) when it is selected and the drop down is open -->
@@ -52,5 +44,17 @@
                      ResourceId=OpenDropDownButton_Background}"
                      options:Freeze="true"
                      Color="{DynamicResource {x:Static MLib_reskeys:ResourceKeys.ControlAccentColorKey}}" />
+
+    <!-- Setting ProgressBar foreground color
+         Not really needed here since ProgressBar style is overwritten below
+         but its redefined just in case ... -->
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.HotTrackBrushKey}"
+                     Color="{DynamicResource {x:Static MLib_reskeys:ResourceKeys.ControlAccentColorKey}}"/>
+
+    <!-- Setting ProgressBar style to use a standard progressbar display instead of the
+         infinite metro progress display ... -->
+    <Style x:Key="{x:Static reskeys:ResourceKeys.BreadcrumbProgressBarStyleKey}"
+           BasedOn="{StaticResource {x:Static MLib_reskeys:ResourceKeys.ProgressStyleKey }}"
+           TargetType="ProgressBar"/>
 
 </ResourceDictionary>

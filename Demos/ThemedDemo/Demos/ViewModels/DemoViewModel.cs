@@ -14,11 +14,5 @@
         {
         }
         #endregion constructors
-
-        #region properties
-        #endregion properties
-
-        #region methods
-        #endregion methods
     }
 }

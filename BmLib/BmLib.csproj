@@ -21,6 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Debug\BmLib.xml</DocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -29,8 +30,12 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Release\BmLib.xml</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="SuggestBoxLib, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Dirkster.SuggestBoxLib.1.0.1\lib\net452\SuggestBoxLib.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
@@ -46,13 +51,11 @@
     <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BaseControls\BindingProxy.cs" />
-    <Compile Include="BaseControls\ClipCorner.xaml.cs">
-      <DependentUpon>ClipCorner.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="BaseControls\Invert.cs" />
-    <Compile Include="BaseControls\MultiContentControl.cs" />
-    <Compile Include="BaseControls\OverflowableStackPanel.cs" />
+    <Compile Include="Base\RelayCommand.cs" />
+    <Compile Include="Behaviors\TreeViewVirtualItemBehaviour.cs" />
+    <Compile Include="Controls\BindingProxy.cs" />
+    <Compile Include="Controls\OverflowableStackPanel.cs" />
+    <Compile Include="Behaviors\MergeStyleBehaviour.cs" />
     <Compile Include="Behaviors\SelectionChangedCommand.cs" />
     <Compile Include="Controls\Breadcrumb.xaml.cs">
       <DependentUpon>Breadcrumb.xaml</DependentUpon>
@@ -72,30 +75,23 @@
     <Compile Include="Controls\HotTrack.xaml.cs">
       <DependentUpon>HotTrack.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Controls\SuggestBox\PathExistsValidationRule.cs" />
-    <Compile Include="Controls\SuggestBox\PathHierarchyHelper.cs" />
-    <Compile Include="Controls\SuggestBox\PropertyPathHelper.cs" />
-    <Compile Include="Controls\SuggestBox\SuggestBox.cs" />
-    <Compile Include="Controls\SuggestBox\SuggestBoxBase.cs" />
-    <Compile Include="Controls\SuggestBox\SuggestSource\AutoSuggestSource.cs" />
-    <Compile Include="Controls\SuggestBox\SuggestSource\MultiSuggestSource.cs" />
-    <Compile Include="Controls\SuggestBox\SuggestSource\NullSuggestSource.cs" />
     <Compile Include="Controls\Switch.xaml.cs">
       <DependentUpon>Switch.xaml</DependentUpon>
     </Compile>
     <Compile Include="Converters\AssociatedIconConverter.cs" />
-    <Compile Include="Interfaces\SuggestBox\IHierarchyHelper.cs" />
-    <Compile Include="Interfaces\SuggestBox\ISuggestSource.cs" />
+    <Compile Include="Converters\InvertBoolConverter.cs" />
+    <Compile Include="Interfaces\IBreadcrumbModel.cs" />
+    <Compile Include="Interfaces\IBrowseRequestTaskQueue.cs" />
+    <Compile Include="Interfaces\IParent.cs" />
+    <Compile Include="Interfaces\IProgress.cs" />
     <Compile Include="Themes\ResourceKeys.cs" />
-    <Compile Include="Utils\AsyncUtils.cs" />
-    <Compile Include="Utils\UITools.cs" />
-    <Page Include="BaseControls\ClipCorner.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Page Include="Controls\Breadcrumb.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\BreadcrumbSwitchStyle.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Controls\Breadcrumbs\BreadcrumbTree.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -117,13 +113,17 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Controls\SuggestBox\SuggestBoxBase.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Page Include="Controls\Switch.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Styles\ProgressBar.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Styles\RefreshCancelButton.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Themes\DarkBrushs.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -145,6 +145,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Themes\DarkIcons.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\LightIcons.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Themes\LightTheme.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -154,25 +162,15 @@
       <SubType>Designer</SubType>
     </Page>
     <Compile Include="Converters\BoolToOneOfTwoBindingsConverter.cs" />
-    <Compile Include="Converters\BoolToVisibilityCollapsedConverter.cs" />
-    <Compile Include="Converters\BoolToVisibilityConverter.cs" />
     <Compile Include="Converters\BoolToVisibilityPropConverter.cs" />
-    <Compile Include="Converters\BorderClipConverter.cs" />
-    <Compile Include="Converters\FlipBoolConverter.cs" />
-    <Compile Include="Converters\FlipBoolToVisibilityCollapsedConverter.cs" />
-    <Compile Include="Converters\FlipBoolToVisibilityConverter.cs" />
     <Page Include="Themes\LightBrushs.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Utils\AttachedProperties.cs" />
-    <Compile Include="Enums\HierarchicalResult.cs" />
     <Compile Include="Enums\UpdateMode.cs" />
-    <Compile Include="Interfaces\IEntryViewModel.cs" />
     <Compile Include="Interfaces\IOverflown.cs" />
-    <Compile Include="Interfaces\IEntryModel.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -191,10 +189,23 @@
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
     <None Include="BmLib.cd" />
+    <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\Icons\Light\Refresh_black_16x.ico" />
+    <Resource Include="Resources\Icons\Dark\Close_White_16x.ico" />
+    <Content Include="Resources\Icons\Dark\Close_White_16x.svg" />
+    <Resource Include="Resources\Icons\Dark\Refresh_white_16x.ico" />
+    <Content Include="Resources\Icons\Dark\Refresh_white_16x.svg" />
+    <Resource Include="Resources\Icons\Light\ExpandChevronDown.ico" />
+    <Content Include="Resources\Icons\Light\Refresh_16x.svg" />
+    <Resource Include="Resources\Icons\Light\Close.ico" />
+    <Content Include="Resources\Icons\Light\Close_16x.svg" />
+  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

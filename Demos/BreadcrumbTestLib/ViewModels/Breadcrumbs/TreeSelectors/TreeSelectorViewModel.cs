@@ -1,8 +1,5 @@
 ﻿namespace BreadcrumbTestLib.ViewModels.Breadcrumbs.TreeSelectors
 {
-    using System.Collections.Generic;
-    using System.Threading.Tasks;
-    using BreadcrumbTestLib.Utils;
     using BreadcrumbTestLib.ViewModels.Interfaces;
 
     /// <summary>
@@ -10,22 +7,20 @@
     /// based structure and supports LookupProcessing.
     /// </summary>
     /// <typeparam name="VM">Reference to a type of viewmodel</typeparam>
-    /// <typeparam name="T">reference to a type of model that is required by the viewmodel</typeparam>
-    internal class TreeSelectorViewModel<VM, T> : Base.ViewModelBase, ITreeSelector<VM, T>
+    /// <typeparam name="M">reference to a type of model that is required by the viewmodel</typeparam>
+    internal class TreeSelectorViewModel<VM, M> : Base.ViewModelBase, ITreeSelector<VM, M>
     {
         #region fields
         /// <summary>
         /// Log4net logger facility for this class.
         /// </summary>
         protected static readonly log4net.ILog Logger = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-
-        private readonly AsyncLock _lookupLock = new AsyncLock();
         private bool _isSelected = false;
 
         // Holds the location model of the selected child of this entry (if any)
-        private T _SelectedChild = default(T);
+        private M _SelectedChild = default(M);
 
-        private T _Value = default(T);
+        private M _Value = default(M);
         private VM _ViewModel;
 
         private bool _isRoot = false;
@@ -40,16 +35,12 @@
         /// <param name="viewModel">Is the viewmodel object that represents an item in the viewmodel tree structure.</param>
         /// <param name="parentSelector"></param>
         /// <param name="entryHelper"></param>
-        public TreeSelectorViewModel(T value,
+        public TreeSelectorViewModel(M value,
                                      VM viewModel,
-                                     ITreeSelector<VM, T> parentSelector,
                                      IBreadcrumbTreeItemHelperViewModel<VM> entryHelper)
         {
             _Value = value;
             _ViewModel = viewModel;
-
-            RootSelector = parentSelector.RootSelector;
-            ParentSelector = parentSelector;
 
             EntryHelper = entryHelper;
         }
@@ -60,7 +51,7 @@
         protected TreeSelectorViewModel(IBreadcrumbTreeItemHelperViewModel<VM> entryHelper)
         {
             EntryHelper = entryHelper;
-            RootSelector = this as ITreeRootSelector<VM, T>;
+////            RootSelector = this as ITreeRootSelector<VM, T>;
         }
         #endregion
 
@@ -123,7 +114,7 @@
         /// <summary>
         /// Gets the selected child of current view model.          
         /// </summary>
-        public T SelectedChild
+        public M SelectedChild
         {
             get
             {
@@ -145,7 +136,7 @@
         /// The model backs the <see cref="ViewModel"/> property and should be in sync
         /// with it.
         /// </summary>
-        public T Value
+        public M Value
         {
             get { return _Value; }
         }
@@ -157,16 +148,6 @@
         {
             get { return _ViewModel; }
         }
-
-        /// <summary>
-        /// Gets the parent's ViewModel <see cref="ITreeSelector"/>.
-        /// </summary>
-        public ITreeSelector<VM, T> ParentSelector { get; }
-
-        /// <summary>
-        /// Gets the root's ViewModel <see cref="ITreeSelector"/>.
-        /// </summary>
-        public ITreeRootSelector<VM, T> RootSelector { get; }
 
         /// <summary>
         /// Gets All sub-entries of the current tree item
@@ -223,17 +204,6 @@
             return string.Format("Model '{0}', ViewModel '{1}'",
                 _Value == null ? string.Empty : _Value.ToString(),
                 _ViewModel == null ? string.Empty : _ViewModel.ToString());
-        }
-
-        /// <summary>
-        /// Bubble up to TreeSelectionHelper for selection.
-        /// </summary>
-        /// <param name="path"></param>
-        public virtual Task ReportChildSelectedAsync(Stack<ITreeSelector<VM, T>> path)
-        {
-            Logger.InfoFormat("_");
-
-            return Task.Run(() => { });
         }
         #endregion
     }

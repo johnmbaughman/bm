@@ -53,8 +53,8 @@
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ButtonSelectedColor}"
                      Color="White" options:Freeze="true" />
 
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ButtonBackgoundColor}"
-                     Color="White" options:Freeze="true" />
+    <!--SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ButtonBackgoundColor}"
+                     Color="White" options:Freeze="true" /-->
 
     <!-- Decide whether styling is using a 3D depth effect or not -->
     <sys:Boolean x:Key="{ComponentResourceKey TypeInTargetAssembly={x:Type reskeys:ResourceKeys},
@@ -70,9 +70,10 @@
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.HotTrack_BackgroundBrush}"
                      Color="#FFd9eee5" options:Freeze="true" />
 
-    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.HotTrack_HighlightBrush}"
-                     Color="{DynamicResource {x:Static reskeys:ResourceKeys.ControlAccentColorKey}}"
-                     Opacity=".1" options:Freeze="true"
+    <SolidColorBrush x:Key="{ComponentResourceKey TypeInTargetAssembly={x:Type reskeys:ResourceKeys},
+                     ResourceId=HotTrack_HighlightBrush}"
+                     Color="#FFDDDDDD"
+                     options:Freeze="true"
                      />
 
     <!-- This color is applied to the drop down button (Hottrack) when it is selected and the drop down is open -->
@@ -86,6 +87,13 @@
                      Color="#cccccc" options:Freeze="true" />
 
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlDisabledBackgroundKey}"
-                     Color="#20000000" options:Freeze="true" />
+                     Color="Transparent" options:Freeze="true" />
+
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlDisabledBorderKey}"
+                     Color="Transparent" options:Freeze="true" />
+    
+    <!-- Setting ProgressBar foreground color -->
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.HotTrackBrushKey}"
+                     Color="{DynamicResource {x:Static reskeys:ResourceKeys.ControlAccentColorKey}}"/>
 
 </ResourceDictionary>

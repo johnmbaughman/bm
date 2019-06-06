@@ -80,10 +80,10 @@
         /// </summary>
         public static readonly ComponentResourceKey ButtonSelectedColor = new ComponentResourceKey(typeof(ResourceKeys), "ButtonSelectedColor");
 
-        /// <summary>
-        /// Currently not used (or only in uncommented lines).
-        /// </summary>
-        public static readonly ComponentResourceKey ButtonBackgoundColor = new ComponentResourceKey(typeof(ResourceKeys), "ButtonBackgoundColor");
+////        /// <summary>
+////        /// Currently not used (or only in uncommented lines).
+////        /// </summary>
+////        public static readonly ComponentResourceKey ButtonBackgoundColor = new ComponentResourceKey(typeof(ResourceKeys), "ButtonBackgoundColor");
 
         /// <summary>
         /// Decide whether styling is using a 3D depth effect or not
@@ -129,6 +129,11 @@
         public static readonly ComponentResourceKey ControlDisabledBackgroundKey = new ComponentResourceKey(typeof(ResourceKeys), "ControlDisabledBackgroundKey");
 
         /// <summary>
+        /// Gets the Brush key of a control's background color when it is in disabled state.
+        /// </summary>
+        public static readonly ComponentResourceKey ControlDisabledBorderKey = new ComponentResourceKey(typeof(ResourceKeys), "ControlDisabledBorderKey");
+
+        /// <summary>
         /// Gets the Geometry (an right arrow) that is displayed on mouse over on a Breadcrumb ToggleButton.
         /// </summary>
         public static readonly ComponentResourceKey NormalArrow = new ComponentResourceKey(typeof(ResourceKeys), "NormalArrow");
@@ -165,5 +170,44 @@
         /// Implements the background of the Switch control to switch content with click on background
         /// </summary>
         public static readonly ComponentResourceKey BlankButton = new ComponentResourceKey(typeof(ResourceKeys), "BlankButton");
+
+        #region Refresh Cancel Button
+        /// <summary>
+        /// Defines the button style of the Refresh/Cancel button on the far right side of the Breadcrumb control.
+        /// </summary>
+        public static readonly ComponentResourceKey RefreshCancel_ButtonStyle = new ComponentResourceKey(typeof(ResourceKeys), "RefreshCancel_ButtonStyle");
+
+        /// <summary>
+        /// Defines the Icon that is shown for Refresh button displayed on the far right side of the Breadcrumb control.
+        /// </summary>
+        public static readonly ComponentResourceKey ICON_Refresh = new ComponentResourceKey(typeof(ResourceKeys), "ICON_Refresh");
+
+        /// <summary>
+        /// Defines the Icon that is shown for Close button displayed on the far right side of the Breadcrumb control.
+        /// This icon is displayed when the switch is turned to show text of if there is a cancelable background
+        /// task that could be cancelled with this button.
+        /// </summary>
+        public static readonly ComponentResourceKey ICON_Close = new ComponentResourceKey(typeof(ResourceKeys), "ICON_Close");
+
+        /// <summary>
+        /// Defines the (chevron down) icon that is shown for recent location button displayed on the right side of the Breadcrumb control.
+        /// </summary>
+        public static readonly ComponentResourceKey ICON_ExpandDown = new ComponentResourceKey(typeof(ResourceKeys), "ICON_ExpandDown");
+        #endregion Refresh Cancel Button
+
+        /// <summary>
+        /// Defines the style of the progress bar shown inside the Breadcrumb control.
+        /// </summary>
+        public static readonly ComponentResourceKey BreadcrumbProgressBarStyleKey = new ComponentResourceKey(typeof(ResourceKeys), "BreadcrumbProgressBarStyleKey");
+
+        /// <summary>
+        /// Determines the foreground color of the ProgressBar display.
+        /// </summary>
+        public static readonly ComponentResourceKey HotTrackBrushKey = new ComponentResourceKey(typeof(ResourceKeys), "HotTrackBrushKey");
+
+        /// <summary>
+        /// Defines the style of Switch control inside the Breadcrumb control.
+        /// </summary>
+        public static readonly ComponentResourceKey BreadcrumbSwitchStyleKey = new ComponentResourceKey(typeof(ResourceKeys), "BreadcrumbSwitchStyleKey");
     }
 }

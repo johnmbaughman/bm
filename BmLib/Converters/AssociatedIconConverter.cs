@@ -86,7 +86,7 @@
         /// <summary>
         /// Converts the specified value.
         /// </summary>
-        /// <param name="value">The value.</param>
+        /// <param name="values">The value.</param>
         /// <param name="targetType">Type of the target.</param>
         /// <param name="parameter">The parameter.</param>
         /// <param name="culture">The culture.</param>
@@ -132,7 +132,7 @@
                 try
                 {
                     // The resource for loading this item's icon is known
-                    // So, we attempt to extract and display this
+                    // So, we attempt to extract and display it
                     if (iconResourceId != null)
                     {
                         string[] resourceId = iconResourceId.Split(',');
@@ -140,13 +140,23 @@
 
                         if (resourceId != null && resourceId.Length == 2)
                         {
-                            return Extract(resourceId[0], iconIndex, iconSize);
+                            if (string.IsNullOrEmpty(resourceId[0]) == false)
+                            {
+                                if (IsReferenceToUnknownIcon(resourceId[0], iconIndex) == false)
+                                    return Extract(resourceId[0], iconIndex, iconSize);
+                            }
+                            else
+                            {
+                                Debug.WriteLine(string.Format("---> 0 Failed to get icon from '{0}' with '{1}'",
+                                    path, iconResourceId));
+                            }
                         }
                     }
                 }
                 catch (Exception exception)
                 {
-                    Debug.WriteLine(string.Format("---> 1 Failed to get icon from {0}: {1}{2}", path, Environment.NewLine, exception.ToString()));
+                    Debug.WriteLine(string.Format("---> 1 Failed to get icon from {0}: {1}{2}",
+                        path, Environment.NewLine, exception.ToString()));
                 }
 
                 try
@@ -168,13 +178,42 @@
         /// Converts the back.
         /// </summary>
         /// <param name="value">The value.</param>
-        /// <param name="targetType">Type of the target.</param>
+        /// <param name="targetTypes">Type of the target.</param>
         /// <param name="parameter">The parameter.</param>
         /// <param name="culture">The culture.</param>
         /// <returns></returns>
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         {
             throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Gets if the icon points to a real association or just a blank page
+        /// saying: "We don't really know the association but here is an icon anyway..."
+        /// https://www.win7dll.info/imageres_dll.html
+        /// </summary>
+        /// <param name="filename"></param>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        private bool IsReferenceToUnknownIcon(string filename, int index)
+        {
+            if (index == -3)
+            {
+                const string imgresdll = "imageres.dll";
+                if (filename.Length > imgresdll.Length)
+                {
+                    int idx = filename.IndexOf(imgresdll);
+                    if (idx > 0)
+                    {
+                        string match = filename.Substring(idx);
+
+                        if (string.Compare(match, imgresdll, true) == 0)
+                            return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -187,6 +226,9 @@
         /// <returns></returns>
         public ImageSource Extract(string file, int iconIndex, IconSize iconSize)
         {
+            if (string.IsNullOrEmpty(file))
+                return null;
+
             IntPtr large = default(IntPtr);
             IntPtr small = default(IntPtr);
             var hr = NativeMethods.ExtractIconEx(file, iconIndex, out large, out small, 1);
@@ -281,7 +323,7 @@
                 // throw new Exception("Failed to decode icon.");
             }
 
-            // Retrn the icon
+            // Return the icon
             return bitmapDecoder.Frames[0];
         }
         #endregion
@@ -459,4 +501,3 @@
         #endregion  private classes
     }
 }
-

@@ -8,26 +8,27 @@
   <Style TargetType="{x:Type ctlrs:DropDown}">
     <Setter Property="Background" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ControlNormalBackgroundKey}}" />
     <Setter Property="BorderBrush" Value="{DynamicResource {x:Static reskeys:ResourceKeys.ControlBorderBrushKey}}" />
-    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderThickness" Value="0" />
     <Setter Property="HeaderButtonTemplate" Value="{DynamicResource {x:Static reskeys:ResourceKeys.BaseToggleButton}}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="{x:Type ctlrs:DropDown}">
           <Grid>
-            <ToggleButton x:Name="PART_ToggleButton"
-                          Template="{Binding HeaderButtonTemplate, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" 
-                          BorderBrush="{TemplateBinding BorderBrush}" 
-                          BorderThickness="{TemplateBinding BorderThickness}"  
-                          HorizontalAlignment="Center"
-                          HorizontalContentAlignment="Center"
-                          VerticalContentAlignment="Center"
-                          Margin="0"
-                          Padding="0"
-                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-              <Grid>
-                <ContentPresenter Content="{TemplateBinding Header}" />
-              </Grid>
-            </ToggleButton>
+            <ToggleButton
+                x:Name="PART_ToggleButton"
+                Template="{Binding HeaderButtonTemplate, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" 
+                Content="{TemplateBinding Header}"
+                BorderBrush="{TemplateBinding BorderBrush}" 
+                BorderThickness="{TemplateBinding BorderThickness}"  
+                HorizontalAlignment="Center"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                Margin="0"
+                Padding="0"
+                IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                MinWidth="{Binding ActualHeight, RelativeSource={RelativeSource Self}}" 
+                MinHeight="{Binding ActualWidth, RelativeSource={RelativeSource Self}}"
+             />
 
             <Popup
                 x:Name="PART_Popup" Focusable="False"
@@ -49,12 +50,12 @@
                           BorderBrush="{TemplateBinding BorderBrush}" 
                           BorderThickness="{TemplateBinding BorderThickness}">
                     <Grid>
-                        <ScrollViewer Focusable="False"
+                        <!--ScrollViewer Focusable="False"
                                       CanContentScroll="True"
                                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"-->
                             <ContentPresenter x:Name="PART_Content" Content="{TemplateBinding Content}" />
-                        </ScrollViewer>
+                        <!--/ScrollViewer-->
                     </Grid>
                   </Border>
                 </Grid>

@@ -5,6 +5,13 @@
     xmlns:options="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
     xmlns:reskeys="clr-namespace:BmLib.Themes"
     >
+
+    <Color x:Key="{x:Static reskeys:ResourceKeys.ControlAccentColorKey}" options:Freeze="true">#1ba1e2</Color>
+
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlAccentBrushKey}"
+                     Color="{DynamicResource {x:Static reskeys:ResourceKeys.ControlAccentColorKey}}"
+                     options:Freeze="true" />
+
     <!-- Generic Color Definitions including 3-D depth effect as in Windows 7 -->
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlNormalBackgroundKey}" Color="White" options:Freeze="true"/>
 
@@ -28,12 +35,12 @@
         <GradientStop Color="#FFa6d9f4" Offset="0.75" />
     </LinearGradientBrush>
 
-    <LinearGradientBrush x:Key="{x:Static reskeys:ResourceKeys.ButtonBackgoundColor}" StartPoint="0,0" EndPoint="0,1" options:Freeze="true">
+    <!--LinearGradientBrush x:Key="{x:Static reskeys:ResourceKeys.ButtonBackgoundColor}" StartPoint="0,0" EndPoint="0,1" options:Freeze="true">
         <GradientStop Color="#FFeaf6fd" Offset="0.2" />
         <GradientStop Color="#FFd7effc" Offset="0.25" />
         <GradientStop Color="#FFbde6fd" Offset="0.5" />
         <GradientStop Color="#FFa6d9f4" Offset="0.75" />
-    </LinearGradientBrush>
+    </LinearGradientBrush-->
 
     <!-- Decide whether styling is using a 3D depth effect or not -->
     <sys:Boolean x:Key="{ComponentResourceKey TypeInTargetAssembly={x:Type reskeys:ResourceKeys},
@@ -62,6 +69,12 @@
                      Color="#cccccc" />
 
     <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlDisabledBackgroundKey}" options:Freeze="true"
-                     Color="#20000000" />
+                     Color="Transparent" />
 
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.ControlDisabledBorderKey}"
+                     Color="Transparent" options:Freeze="true" />
+    
+    <SolidColorBrush x:Key="{x:Static reskeys:ResourceKeys.HotTrackBrushKey}"
+                     Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}"/>
+    
 </ResourceDictionary>

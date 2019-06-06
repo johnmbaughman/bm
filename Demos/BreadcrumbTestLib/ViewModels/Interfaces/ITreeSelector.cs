@@ -1,8 +1,6 @@
 ﻿namespace BreadcrumbTestLib.ViewModels.Interfaces
 {
-    using System.Collections.Generic;
     using System.ComponentModel;
-    using System.Threading.Tasks;
 
     /// <summary>
     /// Implement Tree based structure and support LookupProcessing.
@@ -33,13 +31,13 @@
         bool IsChildSelected { get; }
 
         /// <summary>
-        /// Gets the selected child of current view model.          
+        /// Gets the model of the selected child item.
         /// </summary>
         M SelectedChild { get; set; }
 
         /// <summary>
         /// Gets the instance of the model object that represents this selection helper.
-        /// The model backs the <see cref="ViewModel"/> property and should be in sync
+        /// The model backs the ViewModel property and should be in sync
         /// with it.
         /// </summary>
         M Value { get; }
@@ -48,16 +46,6 @@
         /// Gets the owning ViewModel of this selection helper.
         /// </summary>
         VM ViewModel { get; }
-
-        /// <summary>
-        /// Gets the parent's ViewModel <see cref="ITreeSelector"/>.
-        /// </summary>
-        ITreeSelector<VM, M> ParentSelector { get; }
-
-        /// <summary>
-        /// Gets the root's ViewModel <see cref="ITreeSelector"/>.
-        /// </summary>
-        ITreeRootSelector<VM, M> RootSelector { get; }
 
         /// <summary>
         /// Gets All sub-entries of the current tree item
@@ -84,11 +72,6 @@
         #endregion properties
 
         #region methods
-        /// <summary>
-        /// Used by a tree node to report to it's root it's selected.
-        /// </summary>
-        /// <param name="path"></param>
-        Task ReportChildSelectedAsync(Stack<ITreeSelector<VM, M>> path);
         #endregion methods
     }
 }
